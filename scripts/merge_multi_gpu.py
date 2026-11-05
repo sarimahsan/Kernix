@@ -6,11 +6,16 @@ and compiles final SFT and DPO training datasets.
 """
 
 from __future__ import annotations
+import sys
 import os
 import glob
 import json
 import argparse
 from typing import List, Dict, Any
+
+# Ensure project root is in sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from gpuperf.schema.pir import PIRReport
 from gpuperf.synthesis.trajectory_builder import TrajectoryBuilder
 

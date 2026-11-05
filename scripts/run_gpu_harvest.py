@@ -7,7 +7,13 @@ Usage:
     python scripts/run_gpu_harvest.py --duration-minutes 60
 """
 
+import sys
+import os
 import argparse
+
+# Ensure project root is in sys.path when invoked from scripts/ or anywhere
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from gpuperf.profiler.multi_gpu_harvester import MultiGPUHarvester
 
 

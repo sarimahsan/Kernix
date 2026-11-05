@@ -6,10 +6,15 @@ standardized SFT training samples and DPO preference pairs.
 """
 
 from __future__ import annotations
+import sys
 import os
 import json
 import argparse
 from typing import List, Dict, Any, Tuple
+
+# Ensure project root is in sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from gpuperf.schema.pir import PIRReport, HardwareInfo
 from gpuperf.profiler.ncu_runner import NCURunner
 from gpuperf.profiler.ncu_parser import NCUParser

@@ -4,10 +4,15 @@ Runs on an NVIDIA L4 GPU (Colab or Cloud VM) to execute parametric kernel sweeps
 extract NCU profiler metrics, and build the 500-sample SFT & DPO pilot datasets.
 """
 
+import sys
 import os
 import json
 import argparse
 from typing import List, Dict, Any
+
+# Ensure project root is in sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from gpuperf.schema.pir import PIRReport, HardwareInfo
 from gpuperf.profiler.ncu_runner import NCURunner
 from gpuperf.profiler.ncu_parser import NCUParser
