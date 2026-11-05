@@ -1,0 +1,41 @@
+# DPO Pilot Training Configuration for GPUPerf-3B on NVIDIA L4 (24GB)
+
+model_id: "./checkpoints/gpuperf_sft_pilot"
+dataset_path: "./data/dpo_pilot.jsonl"
+output_dir: "./checkpoints/gpuperf_dpo_pilot"
+
+# Context & Sequence Limits
+max_length: 3072
+max_prompt_length: 1536
+load_in_4bit: true
+
+# LoRA Hyperparameters
+lora_rank: 32
+lora_alpha: 64
+lora_dropout: 0.05
+target_modules:
+  - "q_proj"
+  - "k_proj"
+  - "v_proj"
+  - "o_proj"
+  - "gate_proj"
+  - "up_proj"
+  - "down_proj"
+
+# DPO Hyperparameters
+beta: 0.1
+num_train_epochs: 2
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+learning_rate: 5.0e-5
+lr_scheduler_type: "cosine"
+warmup_ratio: 0.1
+
+# Hardware Optimizations
+bf16: true
+fp16: false
+optim: "adamw_8bit"
+gradient_checkpointing: true
+logging_steps: 5
+save_strategy: "epoch"
+

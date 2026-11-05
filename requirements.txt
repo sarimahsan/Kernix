@@ -1,0 +1,16 @@
+# Core Dependencies for GPUPerf-3B
+torch>=2.2.0
+triton>=2.2.0
+transformers>=4.45.0
+peft>=0.13.0
+trl>=0.11.0
+datasets>=2.18.0
+bitsandbytes>=0.43.0
+accelerate>=0.30.0
+pyyaml>=6.0.1
+pydantic>=2.6.0
+
+# Optional Performance Boosters (Linux / L4 Cloud)
+# unsloth[cu121-ampere-torch220]
+# flash-attn>=2.5.0
+

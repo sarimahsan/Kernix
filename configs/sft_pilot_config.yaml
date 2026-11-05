@@ -1,0 +1,40 @@
+# SFT Pilot Training Configuration for GPUPerf-3B on NVIDIA L4 (24GB)
+
+model_id: "Qwen/Qwen2.5-Coder-3B-Instruct"
+dataset_path: "./data/sft_pilot.jsonl"
+output_dir: "./checkpoints/gpuperf_sft_pilot"
+
+# Context & Quantization
+max_seq_length: 4096
+load_in_4bit: true
+
+# LoRA Hyperparameters
+lora_rank: 32
+lora_alpha: 64
+lora_dropout: 0.05
+target_modules:
+  - "q_proj"
+  - "k_proj"
+  - "v_proj"
+  - "o_proj"
+  - "gate_proj"
+  - "up_proj"
+  - "down_proj"
+
+# Training Hyperparameters
+num_train_epochs: 3
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 4
+learning_rate: 2.0e-4
+lr_scheduler_type: "cosine"
+warmup_ratio: 0.05
+weight_decay: 0.01
+
+# Hardware Optimizations
+bf16: true
+fp16: false
+optim: "adamw_8bit"
+gradient_checkpointing: true
+logging_steps: 10
+save_strategy: "epoch"
+
