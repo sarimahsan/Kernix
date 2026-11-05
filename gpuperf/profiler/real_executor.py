@@ -292,3 +292,4 @@ class RealKernelExecutor:
                 "bandwidth_gbs": 0.0,
                 "shared_mem_kb": 0.0
             }
+
