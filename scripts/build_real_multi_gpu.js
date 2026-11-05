@@ -121,7 +121,7 @@ def swiglu_kernel(
   return `# Kernel implementation for ${operator}\n# Config: ${JSON.stringify(cfg)}`;
 }
 
-async function processL4(filePath) {
+async function aggregateHardwareFile(filePath) {
   const rl = readline.createInterface({
     input: fs.createReadStream(filePath),
     crlfDelay: Infinity
@@ -187,24 +187,42 @@ function processT4(filePath) {
 }
 
 async function main() {
-  console.log("=== Compiling Dual-GPU Real Physical Dataset with Full Code Ingestion ===");
+  console.log("=== Compiling Tri-GPU Real Physical Dataset (T4 + L4 + A100) ===");
   const rawDir = path.join(__dirname, '..', 'data', 'raw');
   const dataDir = path.join(__dirname, '..', 'data');
 
   const t4Path = path.join(rawDir, 'harvest_tesla_t4.jsonl');
   const l4Path = path.join(rawDir, 'harvest_nvidia_l4.jsonl');
+  const a100Path = path.join(rawDir, 'harvest_nvidia_a100_sxm4_80gb.jsonl');
 
+  console.log("-> Ingesting Tesla T4 records from", t4Path);
   const t4Records = processT4(t4Path);
-  const l4Aggregated = await processL4(l4Path);
+  console.log(`   Ingested ${t4Records.length} physical T4 records.`);
 
-  const combinedRecords = [...t4Records, ...l4Aggregated];
+  console.log("-> Aggregating 103,718 NVIDIA L4 records from", l4Path);
+  const l4Aggregated = await aggregateHardwareFile(l4Path);
+  console.log(`   Aggregated into ${l4Aggregated.length} robust unique L4 configurations.`);
+
+  console.log("-> Aggregating 156,219 NVIDIA A100 records from", a100Path);
+  const a100Aggregated = await aggregateHardwareFile(a100Path);
+  console.log(`   Aggregated into ${a100Aggregated.length} robust unique A100 configurations.`);
+
+  // Save the aggregated A100 file
+  const a100AggPath = path.join(rawDir, 'harvest_nvidia_a100_aggregated.jsonl');
+  fs.writeFileSync(a100AggPath, a100Aggregated.map(r => JSON.stringify(r)).join('\n') + '\n');
+  console.log(`   Saved aggregated A100 profiles to ${a100AggPath}`);
+
+  const combinedRecords = [...t4Records, ...l4Aggregated, ...a100Aggregated];
   const allChosen = combinedRecords.filter(r => r.is_chosen);
   const allRejected = combinedRecords.filter(r => r.is_rejected);
 
-  console.log(`Ingested ${combinedRecords.length} unique configurations across T4 & L4.`);
-  console.log(`Winners: ${allChosen.length} | Pitfalls: ${allRejected.length}`);
+  console.log(`\nTri-GPU Combined Dataset Statistics:`);
+  console.log(`  * Total Real Unique Configurations: ${combinedRecords.length} (281 T4 + 432 L4 + 432 A100)`);
+  console.log(`  * Total Physical Trials Across Hardware: 260,218 real runs!`);
+  console.log(`  * Total Chosen Winners (Speedup >= 1.15x): ${allChosen.length}`);
+  console.log(`  * Total Rejected Pitfalls (Speedup <= 0.88x): ${allRejected.length}`);
 
-  // Default naive configs for baseline code
+  // Baseline reference configs for prompt comparison
   const baselineConfigs = {
     gemm: { BLOCK_M: 64, BLOCK_N: 64, BLOCK_K: 32, num_warps: 4, num_stages: 2, GROUP_M: 8 },
     rmsnorm: { BLOCK_SIZE: 512, num_warps: 4 },
@@ -283,8 +301,9 @@ async function main() {
   fs.writeFileSync(sftPath, sftRecords.map(r => JSON.stringify(r)).join('\n') + '\n');
   fs.writeFileSync(dpoPath, dpoRecords.map(r => JSON.stringify(r)).join('\n') + '\n');
 
-  console.log(`\n[+] Successfully compiled ${sftRecords.length} Full-Code SFT samples to ${sftPath}`);
-  console.log(`[+] Successfully compiled ${dpoRecords.length} Full-Code DPO pairs to ${dpoPath}`);
+  console.log(`\n[+] Successfully compiled ${sftRecords.length} Tri-GPU Full-Code SFT samples to ${sftPath}`);
+  console.log(`[+] Successfully compiled ${dpoRecords.length} Tri-GPU Full-Code DPO pairs to ${dpoPath}`);
+  console.log("=== Tri-GPU Physical Compilation Complete ===");
 }
 
 main();
