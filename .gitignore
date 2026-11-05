@@ -17,10 +17,22 @@ adapter_config.json
 adapter_model.safetensors
 
 # Data & Profiles
-data/
 *.ncu-rep
 *.csv
+
+# Ignore massive raw multi-hundred MB execution traces (>100MB blocks GitHub push)
+data/raw/harvest_nvidia_l4.jsonl
+data/raw/harvest_nvidia_a100_sxm4_80gb.jsonl
+data/raw/harvest_rtx_pro_6000_blackwell.jsonl
 *.jsonl
+
+# Whitelist compiled training datasets and aggregated profiles for Colab training
+!data/sft_multi_gpu.jsonl
+!data/dpo_multi_gpu.jsonl
+!data/raw/harvest_tesla_t4.jsonl
+!data/raw/harvest_nvidia_l4_aggregated.jsonl
+!data/raw/harvest_nvidia_a100_aggregated.jsonl
+!data/raw/harvest_rtx_pro_6000_blackwell_aggregated.jsonl
 
 # Logs
 wandb/

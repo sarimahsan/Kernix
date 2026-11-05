@@ -121,35 +121,35 @@ def swiglu_kernel(
   return `# Kernel implementation for ${operator}\n# Config: ${JSON.stringify(cfg)}`;
 }
 
-async function aggregateHardwareFile(filePath) {
-  const rl = readline.createInterface({
-    input: fs.createReadStream(filePath),
-    crlfDelay: Infinity
-  });
+  async function aggregateHardwareFile(filePath) {
+    const rl = readline.createInterface({
+      input: fs.createReadStream(filePath),
+      crlfDelay: Infinity
+    });
 
-  const configStats = {};
+    const configStats = {};
 
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    try {
-      const r = JSON.parse(line);
-      const key = r.operator + ' | ' + JSON.stringify(r.config);
-      if (!configStats[key]) {
-        configStats[key] = {
-          device: r.device,
-          arch: r.arch,
-          num_sms: r.num_sms,
-          peak_bandwidth_gbs: r.peak_bandwidth_gbs,
-          operator: r.operator,
-          config: r.config,
-          latencies: [],
-          speedups: [],
-          pir: r.pir
-        };
-      }
-      configStats[key].latencies.push(r.measured_latency_us);
-      configStats[key].speedups.push(r.speedup_vs_baseline);
-    } catch (e) {}
+    for await (const line of rl) {
+      if (!line.trim()) continue;
+      try {
+        const r = JSON.parse(line);
+        const key = r.operator + ' | ' + JSON.stringify(r.config);
+        if (!configStats[key]) {
+          configStats[key] = {
+            device: r.device,
+            arch: r.arch,
+            num_sms: r.num_sms,
+            peak_bandwidth_gbs: r.peak_bandwidth_gbs,
+            operator: r.operator,
+            config: r.config,
+            latencies: [],
+            speedups: [],
+            pir: r.pir
+          };
+        }
+        configStats[key].latencies.push(r.measured_latency_us);
+        configStats[key].speedups.push(r.speedup_vs_baseline);
+    } catch (e) { }
   }
 
   return Object.values(configStats).map(c => {
@@ -187,38 +187,44 @@ function processT4(filePath) {
 }
 
 async function main() {
-  console.log("=== Compiling Tri-GPU Real Physical Dataset (T4 + L4 + A100) ===");
+  console.log("=== Compiling Quad-GPU Real Physical Dataset (T4 + L4 + A100 + Blackwell RTX 6000) ===");
   const rawDir = path.join(__dirname, '..', 'data', 'raw');
   const dataDir = path.join(__dirname, '..', 'data');
 
   const t4Path = path.join(rawDir, 'harvest_tesla_t4.jsonl');
   const l4Path = path.join(rawDir, 'harvest_nvidia_l4.jsonl');
   const a100Path = path.join(rawDir, 'harvest_nvidia_a100_sxm4_80gb.jsonl');
+  const blackwellPath = path.join(rawDir, 'harvest_rtx_pro_6000_blackwell.jsonl');
 
   console.log("-> Ingesting Tesla T4 records from", t4Path);
   const t4Records = processT4(t4Path);
   console.log(`   Ingested ${t4Records.length} physical T4 records.`);
 
-  console.log("-> Aggregating 103,718 NVIDIA L4 records from", l4Path);
+  console.log("-> Aggregating NVIDIA L4 records from", l4Path);
   const l4Aggregated = await aggregateHardwareFile(l4Path);
   console.log(`   Aggregated into ${l4Aggregated.length} robust unique L4 configurations.`);
 
-  console.log("-> Aggregating 156,219 NVIDIA A100 records from", a100Path);
+  console.log("-> Aggregating NVIDIA A100 records from", a100Path);
   const a100Aggregated = await aggregateHardwareFile(a100Path);
   console.log(`   Aggregated into ${a100Aggregated.length} robust unique A100 configurations.`);
 
-  // Save the aggregated A100 file
-  const a100AggPath = path.join(rawDir, 'harvest_nvidia_a100_aggregated.jsonl');
-  fs.writeFileSync(a100AggPath, a100Aggregated.map(r => JSON.stringify(r)).join('\n') + '\n');
-  console.log(`   Saved aggregated A100 profiles to ${a100AggPath}`);
+  console.log("-> Aggregating NVIDIA RTX PRO 6000 Blackwell records from", blackwellPath);
+  const blackwellAggregated = await aggregateHardwareFile(blackwellPath);
+  console.log(`   Aggregated into ${blackwellAggregated.length} robust unique Blackwell configurations.`);
 
-  const combinedRecords = [...t4Records, ...l4Aggregated, ...a100Aggregated];
+  // Save the aggregated Blackwell file
+  const blackwellAggPath = path.join(rawDir, 'harvest_rtx_pro_6000_blackwell_aggregated.jsonl');
+  fs.writeFileSync(blackwellAggPath, blackwellAggregated.map(r => JSON.stringify(r)).join('\n') + '\n');
+  console.log(`   Saved aggregated Blackwell profiles to ${blackwellAggPath}`);
+
+  const combinedRecords = [...t4Records, ...l4Aggregated, ...a100Aggregated, ...blackwellAggregated];
   const allChosen = combinedRecords.filter(r => r.is_chosen);
   const allRejected = combinedRecords.filter(r => r.is_rejected);
 
-  console.log(`\nTri-GPU Combined Dataset Statistics:`);
-  console.log(`  * Total Real Unique Configurations: ${combinedRecords.length} (281 T4 + 432 L4 + 432 A100)`);
-  console.log(`  * Total Physical Trials Across Hardware: 260,218 real runs!`);
+  const totalTrials = t4Records.length + 103718 + 156219 + 229991;
+  console.log(`\nQuad-GPU Combined Dataset Statistics:`);
+  console.log(`  * Total Real Unique Configurations: ${combinedRecords.length} (${t4Records.length} T4 + ${l4Aggregated.length} L4 + ${a100Aggregated.length} A100 + ${blackwellAggregated.length} Blackwell)`);
+  console.log(`  * Total Physical Trials Across Hardware: ${totalTrials.toLocaleString()} real runs!`);
   console.log(`  * Total Chosen Winners (Speedup >= 1.15x): ${allChosen.length}`);
   console.log(`  * Total Rejected Pitfalls (Speedup <= 0.88x): ${allRejected.length}`);
 
@@ -266,16 +272,34 @@ async function main() {
     };
   });
 
-  // Build full-code DPO pairs
-  const dpoRecords = [];
-  allChosen.forEach((chosen, idx) => {
-    if (idx < allRejected.length) {
-      const rejected = allRejected[idx];
-      const hw = chosen.pir && chosen.pir.hardware ? chosen.pir.hardware : { device: chosen.device, arch: chosen.arch, num_sms: chosen.num_sms, peak_dram_bandwidth_gbs: chosen.peak_bandwidth_gbs };
-      const chosenCfg = chosen.config;
-      const rejCfg = rejected.config;
-      const op = chosen.operator;
+  // Build full-code DPO pairs: pair chosen with rejected for the SAME operator and SAME device where possible
+  // Group rejected by device and operator
+  const rejectedPool = {};
+  allRejected.forEach(rej => {
+    const key = `${rej.device}__${rej.operator}`;
+    if (!rejectedPool[key]) rejectedPool[key] = [];
+    rejectedPool[key].push(rej);
+  });
 
+  const dpoRecords = [];
+  allChosen.forEach((chosen) => {
+    const hw = chosen.pir && chosen.pir.hardware ? chosen.pir.hardware : { device: chosen.device, arch: chosen.arch, num_sms: chosen.num_sms, peak_dram_bandwidth_gbs: chosen.peak_bandwidth_gbs };
+    const chosenCfg = chosen.config;
+    const op = chosen.operator;
+    const key = `${chosen.device}__${chosen.operator}`;
+    
+    // Pick the best match from same hardware/operator, else fallback to any rejected
+    let rejected = null;
+    if (rejectedPool[key] && rejectedPool[key].length > 0) {
+      // Pick one and rotate
+      rejected = rejectedPool[key].shift();
+      rejectedPool[key].push(rejected); // rotate so we don't exhaust
+    } else if (allRejected.length > 0) {
+      rejected = allRejected[Math.floor(Math.random() * allRejected.length)];
+    }
+
+    if (rejected) {
+      const rejCfg = rejected.config;
       const baseCfg = baselineConfigs[op] || chosenCfg;
       const initialCode = renderKernelCode(op, baseCfg, false, hw.device);
       const chosenCode = renderKernelCode(op, chosenCfg, true, hw.device);
@@ -286,10 +310,15 @@ async function main() {
         chosen: `### Bottleneck Diagnosis\nOptimized specifically for ${hw.device} (${hw.arch}) architecture.\n\n### Optimized TRITON Kernel\n\`\`\`triton\n${chosenCode}\n\`\`\`\n\n### Verification\nAchieved ${chosen.speedup_vs_baseline.toFixed(2)}x physical speedup on ${hw.device} (${chosen.measured_latency_us.toFixed(1)} us).`,
         rejected: `### Bottleneck Diagnosis\nFailed to respect ${rejected.arch} hardware limits.\n\n### Optimized TRITON Kernel\n\`\`\`triton\n${rejectedCode}\n\`\`\`\n\n### Verification\nResulted in ${rejected.speedup_vs_baseline.toFixed(2)}x slowdown on ${rejected.device} (${rejected.measured_latency_us.toFixed(1)} us).`,
         metadata: {
-          chosen_device: chosen.device,
+          device: hw.device,
+          arch: hw.arch,
+          operator: op,
+          chosen_config: chosenCfg,
           chosen_speedup: chosen.speedup_vs_baseline,
-          rejected_device: rejected.device,
-          rejected_speedup: rejected.speedup_vs_baseline
+          chosen_latency_us: chosen.measured_latency_us,
+          rejected_config: rejCfg,
+          rejected_speedup: rejected.speedup_vs_baseline,
+          rejected_latency_us: rejected.measured_latency_us
         }
       });
     }
@@ -301,9 +330,9 @@ async function main() {
   fs.writeFileSync(sftPath, sftRecords.map(r => JSON.stringify(r)).join('\n') + '\n');
   fs.writeFileSync(dpoPath, dpoRecords.map(r => JSON.stringify(r)).join('\n') + '\n');
 
-  console.log(`\n[+] Successfully compiled ${sftRecords.length} Tri-GPU Full-Code SFT samples to ${sftPath}`);
-  console.log(`[+] Successfully compiled ${dpoRecords.length} Tri-GPU Full-Code DPO pairs to ${dpoPath}`);
-  console.log("=== Tri-GPU Physical Compilation Complete ===");
+  console.log(`\n[+] Successfully compiled ${sftRecords.length} Quad-GPU Full-Code SFT samples to ${sftPath}`);
+  console.log(`[+] Successfully compiled ${dpoRecords.length} Quad-GPU Full-Code DPO pairs to ${dpoPath}`);
+  console.log("=== Quad-GPU Physical Compilation Complete ===");
 }
 
 main();
