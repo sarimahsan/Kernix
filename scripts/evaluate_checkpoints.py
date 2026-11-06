@@ -49,7 +49,10 @@ def run_all_in_one_evaluation(
     sft_data_path: str = "./data/sft_multi_gpu.jsonl",
     dpo_data_path: str = "./data/dpo_multi_gpu.jsonl",
     num_samples: int = 15,
-    output_json_path: str = "./eval_summary.json"
+    output_json_path: str = "./eval_summary.json",
+    push_to_hf: bool = False,
+    repo_id: str | None = None,
+    hf_token: str | None = None
 ):
     print("=" * 80)
     print("            GPUPERF ALL-IN-ONE BENCHMARK & EVALUATION SUITE")
@@ -58,8 +61,12 @@ def run_all_in_one_evaluation(
     print(f"SFT Test Dataset:            {sft_data_path}")
     print(f"DPO Preference Dataset:      {dpo_data_path}")
     print(f"CUDA Available:              {torch.cuda.is_available()}")
+    target_arch = None
     if torch.cuda.is_available():
-        print(f"Hardware Attached:           {torch.cuda.get_device_name(0)}")
+        gpu_name = torch.cuda.get_device_name(0)
+        major, minor = torch.cuda.get_device_capability(0)
+        target_arch = f"sm_{major}{minor}"
+        print(f"Hardware Attached:           {gpu_name} ({target_arch})")
     print("=" * 80)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -71,8 +78,16 @@ def run_all_in_one_evaluation(
     with open(dpo_data_path, "r", encoding="utf-8") as f:
         dpo_records = [json.loads(line) for line in f if line.strip()]
 
-    test_sft = sft_records[-num_samples:]
-    test_dpo = dpo_records[-num_samples:]
+    # Hardware-aware held-out sampling: match prompts to attached physical silicon
+    if target_arch:
+        arch_sft = [r for r in sft_records if r.get("metadata", {}).get("arch") == target_arch]
+        arch_dpo = [r for r in dpo_records if r.get("metadata", {}).get("arch") == target_arch]
+        test_sft = arch_sft[-num_samples:] if len(arch_sft) >= num_samples else sft_records[-num_samples:]
+        test_dpo = arch_dpo[-num_samples:] if len(arch_dpo) >= num_samples else dpo_records[-num_samples:]
+        print(f"[i] Filtered {len(test_sft)} evaluation samples matching physical silicon: {target_arch}")
+    else:
+        test_sft = sft_records[-num_samples:]
+        test_dpo = dpo_records[-num_samples:]
 
     # 2. Load Models & Auto-Detect Base Architecture
     from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -232,7 +247,8 @@ def run_all_in_one_evaluation(
             "compilation_passed": gate_res["tier1_compilation_passed"],
             "numerical_passed": gate_res["tier2_numerical_passed"],
             "measured_latency_us": gate_res.get("measured_latency_us"),
-            "speedup": gate_res.get("speedup_vs_baseline")
+            "speedup": gate_res.get("speedup_vs_baseline"),
+            "rejection_reason": gate_res.get("rejection_reason")
         })
 
         sys.stdout.write(f"\r  Verified kernel [{idx + 1}/{len(test_sft)}] on {dev}...")
@@ -287,6 +303,30 @@ def run_all_in_one_evaluation(
     print(f"[+] All detailed evaluation metrics saved to: {output_json_path}")
     print("=" * 80)
 
+    # Optional: Direct Push to Hugging Face
+    if push_to_hf:
+        print("\n" + "=" * 80)
+        print("🚀 AUTOMATICALLY PUBLISHING MODEL TO HUGGING FACE...")
+        print("=" * 80)
+        from scripts.publish_hf import build_and_export_package, push_to_huggingface
+
+        target_repo = repo_id or "sarimahsan/Kernix-3B"
+        model_title = target_repo.split("/")[-1]
+        export_dir = f"./exports/{model_title}"
+
+        build_and_export_package(
+            checkpoint_dir=checkpoint_path,
+            export_dir=export_dir,
+            model_title=model_title,
+            repo_id=target_repo,
+            eval_summary_path=output_json_path
+        )
+        push_to_huggingface(
+            export_dir=export_dir,
+            repo_id=target_repo,
+            token=hf_token
+        )
+
 
 def main():
     parser = argparse.ArgumentParser(description="All-in-One Benchmark Suite for GPUPerf Checkpoints")
@@ -304,6 +344,12 @@ def main():
                         help="Path to DPO data")
     parser.add_argument("-o", "--output_json", type=str, default="./eval_summary.json",
                         help="Output JSON summary path")
+    parser.add_argument("--push_to_hf", action="store_true",
+                        help="Automatically merge and push to Hugging Face Hub upon completing evaluation")
+    parser.add_argument("--repo_id", type=str, default="sarimahsan/Kernix-3B",
+                        help="Hugging Face Repository ID (default: sarimahsan/Kernix-3B)")
+    parser.add_argument("--hf_token", type=str, default=None,
+                        help="Hugging Face API token (reads HF_TOKEN by default)")
     args = parser.parse_args()
 
     # Determine checkpoint path from positional argument or flag
@@ -315,7 +361,10 @@ def main():
         sft_data_path=args.sft_data,
         dpo_data_path=args.dpo_data,
         num_samples=args.samples,
-        output_json_path=args.output_json
+        output_json_path=args.output_json,
+        push_to_hf=args.push_to_hf,
+        repo_id=args.repo_id,
+        hf_token=args.hf_token
     )
 
 

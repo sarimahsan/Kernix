@@ -1,0 +1,169 @@
+{
+  "checkpoint": "/content/checkpoints/checkpoints/gpuperf_3b_dpo_final",
+  "base_model": "Qwen/Qwen2.5-Coder-3B-Instruct",
+  "metrics": {
+    "base_ppl": 4.15,
+    "finetuned_ppl": 1.04,
+    "ppl_reduction_pct": 75.0,
+    "dpo_accuracy_pct": 100.0,
+    "dpo_avg_margin_nats": 102.47,
+    "compilation_pass_rate_pct": 0.0,
+    "numerical_accuracy_rate_pct": 0.0,
+    "speedup_pass_rate_pct": 0.0,
+    "mean_empirical_speedup": 1.0
+  },
+  "sample_count": 15,
+  "hardware": "Tesla T4",
+  "detailed_results": [
+    {
+      "sample_idx": 1,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 2,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 3,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 4,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 5,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 6,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 7,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 8,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 9,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 10,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 11,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 12,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 13,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 14,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    },
+    {
+      "sample_idx": 15,
+      "device": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "arch": "sm_120",
+      "has_code": true,
+      "compilation_passed": false,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null
+    }
+  ]
+}
