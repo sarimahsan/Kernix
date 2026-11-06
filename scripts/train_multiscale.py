@@ -148,8 +148,10 @@ def run_training_pipeline(
     model_size: str = "3b",
     stage: str = "both",
     precision_mode: str = "auto",
-    sft_epochs: int = 3,
+    sft_epochs: int = 2,
     dpo_epochs: int = 1,
+    val_split: float = 0.1,
+    smoke_test: bool = False,
     output_base_dir: str = "./checkpoints"
 ) -> None:
     """Executes the full SFT and/or DPO fine-tuning loop."""
@@ -205,14 +207,40 @@ def run_training_pipeline(
 
         sft_dataset = raw_sft.map(format_sft_prompts, batched=True)
 
+        if val_split > 0 and not smoke_test:
+            split_sft = sft_dataset.train_test_split(test_size=val_split, seed=42)
+            train_sft = split_sft["train"]
+            eval_sft = split_sft["test"]
+            print(f"  * SFT Split: {len(train_sft)} Train samples | {len(eval_sft)} Validation samples")
+        else:
+            train_sft = sft_dataset
+            eval_sft = None
+
         from trl import SFTTrainer
         from transformers import TrainingArguments
 
-        print(f"Starting Stage 1: SFT ({sft_epochs} Epochs)...")
+        eval_kwargs = {}
+        if eval_sft is not None:
+            eval_kwargs = {
+                "eval_strategy": "steps",
+                "eval_steps": 25,
+                "save_strategy": "steps",
+                "save_steps": 25,
+                "save_total_limit": 2,
+                "load_best_model_at_end": True,
+                "metric_for_best_model": "eval_loss",
+                "greater_is_better": False,
+            }
+
+        max_steps = 30 if smoke_test else -1
+        log_steps = 2 if smoke_test else 10
+
+        print(f"Starting Stage 1: SFT ({'SMOKE TEST (30 steps)' if smoke_test else f'{sft_epochs} Epochs'})...")
         trainer = SFTTrainer(
             model=model,
             tokenizer=tokenizer,
-            train_dataset=sft_dataset,
+            train_dataset=train_sft,
+            eval_dataset=eval_sft,
             dataset_text_field="text",
             max_seq_length=config["max_seq_length"],
             dataset_num_proc=2,
@@ -222,22 +250,24 @@ def run_training_pipeline(
                 gradient_accumulation_steps=config["sft_grad_accum"],
                 warmup_ratio=0.08,
                 num_train_epochs=sft_epochs,
+                max_steps=max_steps,
                 learning_rate=config["learning_rate_sft"],
                 fp16=not is_bfloat16_supported(),
                 bf16=is_bfloat16_supported(),
-                logging_steps=10,
+                logging_steps=log_steps,
                 optim="adamw_8bit",
                 weight_decay=0.01,
                 lr_scheduler_type="cosine",
                 seed=42,
-                output_dir=os.path.join(output_base_dir, "trainer_sft_output"),
-                report_to="none"
+                output_dir=os.path.join(output_base_dir, f"trainer_{model_size}_sft"),
+                report_to="none",
+                **eval_kwargs
             ),
         )
         trainer.train()
         model.save_pretrained(sft_ckpt_dir)
         tokenizer.save_pretrained(sft_ckpt_dir)
-        print(f"✅ SFT Stage Complete! Saved adapter to {sft_ckpt_dir}")
+        print(f"✅ SFT Stage Complete! Saved best adapter to {sft_ckpt_dir}")
 
     # -------------------------------------------------------------
     # STAGE 2: DIRECT PREFERENCE OPTIMIZATION (DPO)
@@ -295,8 +325,10 @@ def main():
                         help="Training stage: 'sft', 'dpo', or 'both'")
     parser.add_argument("--precision", type=str, default="auto", choices=["auto", "4bit", "16bit"],
                         help="Precision mode: 'auto' (hardware safe), '4bit', or '16bit'")
-    parser.add_argument("--sft_epochs", type=int, default=3, help="Number of SFT epochs (default: 3)")
+    parser.add_argument("--sft_epochs", type=int, default=2, help="Number of SFT epochs (default: 2)")
     parser.add_argument("--dpo_epochs", type=int, default=1, help="Number of DPO epochs (default: 1)")
+    parser.add_argument("--val_split", type=float, default=0.1, help="Validation split ratio (default: 0.1)")
+    parser.add_argument("--smoke_test", action="store_true", help="Run quick 30-step smoke test")
     parser.add_argument("--output_dir", type=str, default="./checkpoints", help="Output directory for checkpoints")
 
     args = parser.parse_args()
@@ -307,6 +339,8 @@ def main():
         precision_mode=args.precision,
         sft_epochs=args.sft_epochs,
         dpo_epochs=args.dpo_epochs,
+        val_split=args.val_split,
+        smoke_test=args.smoke_test,
         output_base_dir=args.output_dir
     )
 
