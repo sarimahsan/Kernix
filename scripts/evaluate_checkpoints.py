@@ -27,7 +27,7 @@ from gpuperf.profiler.correctness_gate import CorrectnessGate
 
 
 def compute_sequence_logp(model, tokenizer, prompt_text: str, response_text: str, device: str) -> float:
-    """Computes exact conditional log-probability log P(response | prompt)."""
+    """Computes length-normalized conditional log-probability log P(response | prompt) / N."""
     full_text = prompt_text + "\n" + response_text
     inputs = tokenizer(full_text, return_tensors="pt").to(device)
     prompt_len = len(tokenizer(prompt_text, return_tensors="pt")["input_ids"][0])
@@ -39,8 +39,13 @@ def compute_sequence_logp(model, tokenizer, prompt_text: str, response_text: str
 
         loss_fn = torch.nn.CrossEntropyLoss(reduction="none")
         loss = loss_fn(logits.permute(0, 2, 1), labels)
-        total_logp = -loss[labels != -100].sum().item()
-    return total_logp
+        mask = labels != -100
+        num_target_tokens = mask.sum().item()
+        if num_target_tokens == 0:
+            return 0.0
+        # Length-normalized log-probability (eliminates token-length bias between chosen and rejected)
+        mean_logp = -loss[mask].sum().item() / num_target_tokens
+    return mean_logp
 
 
 def run_all_in_one_evaluation(

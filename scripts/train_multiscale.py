@@ -164,34 +164,44 @@ def run_training_pipeline(
     from datasets import load_dataset
     from unsloth.chat_templates import get_chat_template
 
-    print(f"\n[1/4] Loading Base Model: {config['model_id']}...")
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=config["model_id"],
-        max_seq_length=config["max_seq_length"],
-        load_in_4bit=config["load_in_4bit"],
-        dtype=torch.bfloat16 if config["supports_bf16"] else torch.float16,
-    )
+    sft_ckpt_dir = os.path.join(output_base_dir, f"gpuperf_{model_size}_sft")
+    final_ckpt_dir = os.path.join(output_base_dir, f"gpuperf_{model_size}_dpo_final")
+    os.makedirs(output_base_dir, exist_ok=True)
 
-    # Apply LoRA adapters
-    target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
-    model = FastLanguageModel.get_peft_model(
-        model,
-        r=config["lora_rank"],
-        target_modules=target_modules,
-        lora_alpha=config["lora_alpha"],
-        lora_dropout=0,
-        bias="none",
-        use_gradient_checkpointing="unsloth",
-    )
-    print("LoRA adapters initialized!")
+    if stage == "dpo" and os.path.exists(sft_ckpt_dir):
+        print(f"\n[1/4] Loading Pre-Trained SFT Checkpoint from: {sft_ckpt_dir} for DPO stage...")
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=sft_ckpt_dir,
+            max_seq_length=config["max_seq_length"],
+            load_in_4bit=config["load_in_4bit"],
+            dtype=torch.bfloat16 if config["supports_bf16"] else torch.float16,
+        )
+        print("Trained SFT LoRA adapters loaded successfully for DPO!")
+    else:
+        print(f"\n[1/4] Loading Base Model: {config['model_id']}...")
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=config["model_id"],
+            max_seq_length=config["max_seq_length"],
+            load_in_4bit=config["load_in_4bit"],
+            dtype=torch.bfloat16 if config["supports_bf16"] else torch.float16,
+        )
+
+        # Apply LoRA adapters
+        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+        model = FastLanguageModel.get_peft_model(
+            model,
+            r=config["lora_rank"],
+            target_modules=target_modules,
+            lora_alpha=config["lora_alpha"],
+            lora_dropout=0,
+            bias="none",
+            use_gradient_checkpointing="unsloth",
+        )
+        print("LoRA adapters initialized!")
 
     # Format chat template
     template_name = "gemma-2" if "gemma" in config["model_id"].lower() else "qwen-2.5"
     tokenizer = get_chat_template(tokenizer, chat_template=template_name)
-
-    sft_ckpt_dir = os.path.join(output_base_dir, f"gpuperf_{model_size}_sft")
-    final_ckpt_dir = os.path.join(output_base_dir, f"gpuperf_{model_size}_dpo_final")
-    os.makedirs(output_base_dir, exist_ok=True)
 
     # -------------------------------------------------------------
     # STAGE 1: SUPERVISED FINE-TUNING (SFT)

@@ -35,8 +35,13 @@ data/raw/harvest_rtx_pro_6000_blackwell.jsonl
 !data/raw/harvest_nvidia_a100_aggregated.jsonl
 !data/raw/harvest_rtx_pro_6000_blackwell_aggregated.jsonl
 
-# Logs
+
+
+# Logs & Evaluation Summaries
 wandb/
 logs/
 .system_generated/
+eval_summary*.json
+exports/
+
 
