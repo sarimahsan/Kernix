@@ -54,6 +54,7 @@ def run_all_in_one_evaluation(
     sft_data_path: str = "./data/sft_multi_gpu.jsonl",
     dpo_data_path: str = "./data/dpo_multi_gpu.jsonl",
     num_samples: int = 15,
+    operator: str = "all",
     output_json_path: str = "./eval_summary.json",
     push_to_hf: bool = False,
     repo_id: str | None = None,
@@ -87,9 +88,16 @@ def run_all_in_one_evaluation(
     if target_arch:
         arch_sft = [r for r in sft_records if r.get("metadata", {}).get("arch") == target_arch]
         arch_dpo = [r for r in dpo_records if r.get("metadata", {}).get("arch") == target_arch]
+        if operator != "all":
+            filtered_sft = [r for r in arch_sft if r.get("metadata", {}).get("operator") == operator]
+            filtered_dpo = [r for r in arch_dpo if r.get("metadata", {}).get("operator") == operator]
+            if len(filtered_sft) > 0:
+                arch_sft = filtered_sft
+            if len(filtered_dpo) > 0:
+                arch_dpo = filtered_dpo
         test_sft = arch_sft[-num_samples:] if len(arch_sft) >= num_samples else sft_records[-num_samples:]
         test_dpo = arch_dpo[-num_samples:] if len(arch_dpo) >= num_samples else dpo_records[-num_samples:]
-        print(f"[i] Filtered {len(test_sft)} evaluation samples matching physical silicon: {target_arch}")
+        print(f"[i] Filtered {len(test_sft)} evaluation samples matching physical silicon: {target_arch} (operator: {operator})")
     else:
         test_sft = sft_records[-num_samples:]
         test_dpo = dpo_records[-num_samples:]
@@ -228,10 +236,11 @@ def run_all_in_one_evaluation(
 
         gate_res = {"tier1_compilation_passed": False, "tier2_numerical_passed": False, "tier3_speedup_passed": False}
         if torch.cuda.is_available() and code_str:
-            # Baseline is calculated using unoptimized reference
-            gate_res = CorrectnessGate.verify_gemm_kernel(
+            op = metadata.get("operator", "gemm")
+            gate_res = CorrectnessGate.verify_kernel(
                 code_str,
                 launch_cfg,
+                operator=op,
                 baseline_latency_us=baseline_lat * metadata.get("speedup", 1.8)
             )
 
@@ -349,6 +358,8 @@ def main():
                         help="Path to DPO data")
     parser.add_argument("-o", "--output_json", type=str, default="./eval_summary.json",
                         help="Output JSON summary path")
+    parser.add_argument("--operator", type=str, default="all", choices=["all", "gemm", "rmsnorm"],
+                        help="Filter evaluation samples by operator type ('all', 'gemm', 'rmsnorm')")
     parser.add_argument("--push_to_hf", action="store_true",
                         help="Automatically merge and push to Hugging Face Hub upon completing evaluation")
     parser.add_argument("--repo_id", type=str, default="sarimahsan/Kernix-3B",
@@ -366,6 +377,7 @@ def main():
         sft_data_path=args.sft_data,
         dpo_data_path=args.dpo_data,
         num_samples=args.samples,
+        operator=args.operator,
         output_json_path=args.output_json,
         push_to_hf=args.push_to_hf,
         repo_id=args.repo_id,

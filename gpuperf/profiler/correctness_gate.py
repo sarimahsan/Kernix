@@ -1,13 +1,18 @@
-"""Closed-Loop Verification & Correctness Gate for GPUPerf-3B.
+"""Closed-Loop Verification & Correctness Gate for GPUPerf-3B / Kernix Models.
 
 Implements an automated 3-tier validation harness:
 1. Tier 1: Syntax & Compilation Gate (Triton JIT compilation & argument verification)
-2. Tier 2: Numerical Correctness Gate (Reference comparison vs torch.matmul / torch reference)
+2. Tier 2: Numerical Correctness Gate (Reference comparison vs torch golden references)
 3. Tier 3: Physical Profiler Gate (Microsecond CUDA Event benchmarking vs baseline)
+
+Supports both GEMM (matrix multiplication) and RMSNorm operators across NVIDIA architectures.
 """
 
 from __future__ import annotations
+import os
 import re
+import tempfile
+import importlib.util
 import traceback
 from typing import Dict, Any, Tuple, Optional
 import torch
@@ -25,15 +30,18 @@ class CorrectnessGate:
 
         code_str = code_match.group(1).strip()
 
-        # Parse launch config comments e.g. '# Launch Config for Tesla T4: num_warps=8, num_stages=4'
-        launch_config = {"num_warps": 4, "num_stages": 3}
-        warps_match = re.search(r"num_warps\s*=\s*(\d+)", code_str)
-        stages_match = re.search(r"num_stages\s*=\s*(\d+)", code_str)
+        # Parse launch config comments e.g. '# Launch Config for NVIDIA A100: num_warps=8, num_stages=4'
+        launch_config = {"num_warps": 4, "num_stages": 3, "BLOCK_SIZE": 512}
+        warps_match = re.search(r"num_warps\s*[:=]\s*(\d+)", code_str)
+        stages_match = re.search(r"num_stages\s*[:=]\s*(\d+)", code_str)
+        block_match = re.search(r"BLOCK_SIZE\s*[:=]\s*(\d+)", code_str)
 
         if warps_match:
             launch_config["num_warps"] = int(warps_match.group(1))
         if stages_match:
             launch_config["num_stages"] = int(stages_match.group(1))
+        if block_match:
+            launch_config["BLOCK_SIZE"] = int(block_match.group(1))
 
         return code_str, launch_config
 
@@ -46,12 +54,7 @@ class CorrectnessGate:
         K: int = 2048,
         baseline_latency_us: Optional[float] = None
     ) -> Dict[str, Any]:
-        """Runs the 3-Tier Gate on a generated Triton GEMM kernel.
-        
-        Returns:
-            Dict containing pass/fail status for each tier, max numerical difference,
-            measured latency, and empirical speedup.
-        """
+        """Runs the 3-Tier Gate on a generated Triton GEMM kernel."""
         result = {
             "tier1_compilation_passed": False,
             "tier2_numerical_passed": False,
@@ -63,18 +66,13 @@ class CorrectnessGate:
         }
 
         # --- Tier 1: Syntax & Compilation Gate ---
-        # Triton @jit requires inspect.getsource(), so the code must be backed by a real .py file
-        import tempfile
-        import importlib.util
-        import os
-
         temp_file = None
         try:
             with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
                 temp_file = f.name
                 f.write(code_str)
 
-            spec = importlib.util.spec_from_file_location("dynamic_triton_kernel", temp_file)
+            spec = importlib.util.spec_from_file_location("dynamic_triton_gemm", temp_file)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             gemm_fn = getattr(module, "gemm_kernel", None)
@@ -105,7 +103,6 @@ class CorrectnessGate:
             num_warps = launch_config.get("num_warps", 4)
             num_stages = launch_config.get("num_stages", 3)
 
-            # Call the kernel with standard grid and stride arguments
             def grid_fn(META):
                 return (triton.cdiv(M, META.get("BLOCK_M", 64)) * triton.cdiv(N, META.get("BLOCK_N", 64)),)
 
@@ -175,3 +172,142 @@ class CorrectnessGate:
 
         return result
 
+    @staticmethod
+    def verify_rmsnorm_kernel(
+        code_str: str,
+        launch_config: Dict[str, Any],
+        M: int = 4096,
+        N: int = 4096,
+        eps: float = 1e-5,
+        baseline_latency_us: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """Runs the 3-Tier Gate on a generated Triton RMSNorm kernel."""
+        result = {
+            "tier1_compilation_passed": False,
+            "tier2_numerical_passed": False,
+            "tier3_speedup_passed": False,
+            "max_abs_error": None,
+            "measured_latency_us": None,
+            "speedup_vs_baseline": None,
+            "rejection_reason": None
+        }
+
+        temp_file = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
+                temp_file = f.name
+                f.write(code_str)
+
+            spec = importlib.util.spec_from_file_location("dynamic_triton_rmsnorm", temp_file)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            norm_fn = getattr(module, "rmsnorm_kernel", None)
+        except Exception as e:
+            result["rejection_reason"] = f"Tier 1 Syntax/Import Error: {e}"
+            return result
+        finally:
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except Exception:
+                    pass
+
+        if norm_fn is None:
+            result["rejection_reason"] = "Tier 1 Error: 'rmsnorm_kernel' function not found in generated code."
+            return result
+
+        try:
+            x = torch.randn((M, N), device="cuda", dtype=torch.float16)
+            w = torch.ones((N,), device="cuda", dtype=torch.float16)
+            y_triton = torch.empty_like(x)
+
+            # PyTorch golden reference for RMSNorm
+            variance = x.to(torch.float32).pow(2).mean(-1, keepdim=True)
+            y_ref = (x.to(torch.float32) * torch.rsqrt(variance + eps) * w.to(torch.float32)).to(torch.float16)
+
+            num_warps = launch_config.get("num_warps", 4)
+            block_size = launch_config.get("BLOCK_SIZE", 512)
+
+            def grid_fn(META):
+                return (M,)
+
+            # Warmup
+            norm_fn[grid_fn](
+                x, w, y_triton,
+                x.stride(0), y_triton.stride(0),
+                N, eps,
+                num_warps=num_warps,
+                BLOCK_SIZE=block_size
+            )
+            torch.cuda.synchronize()
+            result["tier1_compilation_passed"] = True
+
+            max_diff = (y_triton - y_ref).abs().max().item()
+            result["max_abs_error"] = max_diff
+
+            if torch.allclose(y_triton, y_ref, atol=0.05, rtol=0.01):
+                result["tier2_numerical_passed"] = True
+            else:
+                result["rejection_reason"] = f"Tier 2 Numerical Mismatch: Max error {max_diff:.4f} exceeds FP16 tolerance."
+                return result
+
+        except Exception as e:
+            result["rejection_reason"] = f"Execution Failure: {e}\n{traceback.format_exc()}"
+            return result
+
+        # Tier 3 Timing
+        try:
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
+            iters = 25
+
+            start_event.record()
+            for _ in range(iters):
+                norm_fn[grid_fn](
+                    x, w, y_triton,
+                    x.stride(0), y_triton.stride(0),
+                    N, eps,
+                    num_warps=num_warps,
+                    BLOCK_SIZE=block_size
+                )
+            end_event.record()
+            torch.cuda.synchronize()
+
+            latency_ms = start_event.elapsed_time(end_event) / iters
+            latency_us = latency_ms * 1000.0
+            result["measured_latency_us"] = latency_us
+
+            if baseline_latency_us and baseline_latency_us > 0:
+                speedup = baseline_latency_us / latency_us
+                result["speedup_vs_baseline"] = speedup
+                result["tier3_speedup_passed"] = speedup >= 1.05
+            else:
+                result["tier3_speedup_passed"] = True
+
+        except Exception as e:
+            result["rejection_reason"] = f"Tier 3 Timing Failure: {e}"
+            return result
+
+        return result
+
+    @classmethod
+    def verify_kernel(
+        cls,
+        code_str: str,
+        launch_config: Dict[str, Any],
+        operator: str = "gemm",
+        baseline_latency_us: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """Automatically routes kernel to the appropriate verification gate."""
+        if "rmsnorm_kernel" in code_str or operator.lower() == "rmsnorm":
+            return cls.verify_rmsnorm_kernel(
+                code_str,
+                launch_config,
+                baseline_latency_us=baseline_latency_us
+            )
+        else:
+            return cls.verify_gemm_kernel(
+                code_str,
+                launch_config,
+                baseline_latency_us=baseline_latency_us
+            )
