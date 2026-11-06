@@ -86,10 +86,11 @@ def run_all_in_one_evaluation(
                 cfg = json.load(f)
                 inferred = cfg.get("base_model_name_or_path")
                 if inferred:
-                    if "unsloth/" in inferred and "-bnb-4bit" in inferred:
-                        base_model_id = inferred.replace("unsloth/", "").replace("-bnb-4bit", "")
-                    else:
-                        base_model_id = inferred
+                    clean = inferred.replace("unsloth/", "").replace("-bnb-4bit", "")
+                    # Ensure Hugging Face org namespace (e.g. Qwen/...)
+                    if "/" not in clean:
+                        clean = f"Qwen/{clean}"
+                    base_model_id = clean
                     print(f"[i] Auto-detected base model from adapter_config.json: {base_model_id}")
         except Exception:
             pass

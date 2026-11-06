@@ -191,7 +191,9 @@ def build_and_export_package(
     print("=" * 70)
 
     adapter_config = load_adapter_config(checkpoint_dir)
-    base_model_id = adapter_config.get("base_model_name_or_path", "Qwen/Qwen2.5-Coder-3B-Instruct")
+    raw_base = adapter_config.get("base_model_name_or_path", "Qwen/Qwen2.5-Coder-3B-Instruct")
+    clean = raw_base.replace("unsloth/", "").replace("-bnb-4bit", "")
+    base_model_id = f"Qwen/{clean}" if "/" not in clean else clean
     print(f"Detected Base Model: {base_model_id}")
 
     os.makedirs(export_dir, exist_ok=True)
