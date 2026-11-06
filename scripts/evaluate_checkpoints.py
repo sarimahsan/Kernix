@@ -45,6 +45,7 @@ def compute_sequence_logp(model, tokenizer, prompt_text: str, response_text: str
 
 def run_all_in_one_evaluation(
     checkpoint_path: str = "./checkpoints/gpuperf_3b_dpo_final",
+    base_model_override: str | None = None,
     sft_data_path: str = "./data/sft_multi_gpu.jsonl",
     dpo_data_path: str = "./data/dpo_multi_gpu.jsonl",
     num_samples: int = 15,
@@ -73,11 +74,26 @@ def run_all_in_one_evaluation(
     test_sft = sft_records[-num_samples:]
     test_dpo = dpo_records[-num_samples:]
 
-    # 2. Load Models
+    # 2. Load Models & Auto-Detect Base Architecture
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from peft import PeftModel
 
-    base_model_id = "Qwen/Qwen2.5-Coder-3B-Instruct"
+    base_model_id = base_model_override or "Qwen/Qwen2.5-Coder-3B-Instruct"
+    adapter_cfg_file = os.path.join(checkpoint_path, "adapter_config.json")
+    if os.path.exists(adapter_cfg_file) and not base_model_override:
+        try:
+            with open(adapter_cfg_file, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                inferred = cfg.get("base_model_name_or_path")
+                if inferred:
+                    if "unsloth/" in inferred and "-bnb-4bit" in inferred:
+                        base_model_id = inferred.replace("unsloth/", "").replace("-bnb-4bit", "")
+                    else:
+                        base_model_id = inferred
+                    print(f"[i] Auto-detected base model from adapter_config.json: {base_model_id}")
+        except Exception:
+            pass
+
     print(f"\n[1/5] Loading Tokenizer & Base Model: {base_model_id}...")
 
     tokenizer = AutoTokenizer.from_pretrained(
@@ -263,21 +279,29 @@ def run_all_in_one_evaluation(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="All-in-One Benchmark Suite for GPUPerf")
-    parser.add_argument("--checkpoint", type=str, default="./checkpoints/gpuperf_3b_dpo_final",
-                        help="Path to checkpoint adapter")
+    parser = argparse.ArgumentParser(description="All-in-One Benchmark Suite for GPUPerf Checkpoints")
+    parser.add_argument("checkpoint_pos", nargs="?", default=None,
+                        help="Positional path to adapter checkpoint (e.g. python scripts/evaluate_checkpoints.py ./checkpoints/gpuperf_3b_dpo_final)")
+    parser.add_argument("-c", "--checkpoint", type=str, default=None,
+                        help="Path to adapter checkpoint (e.g. -c ./checkpoints/gpuperf_3b_dpo_final)")
+    parser.add_argument("-b", "--base_model", type=str, default=None,
+                        help="Base model ID (auto-detected from adapter_config.json if omitted)")
+    parser.add_argument("-s", "--samples", type=int, default=15,
+                        help="Number of held-out samples to evaluate (default: 15)")
     parser.add_argument("--sft_data", type=str, default="./data/sft_multi_gpu.jsonl",
                         help="Path to SFT data")
     parser.add_argument("--dpo_data", type=str, default="./data/dpo_multi_gpu.jsonl",
                         help="Path to DPO data")
-    parser.add_argument("--samples", type=int, default=15,
-                        help="Number of held-out samples to evaluate")
-    parser.add_argument("--output_json", type=str, default="./eval_summary.json",
+    parser.add_argument("-o", "--output_json", type=str, default="./eval_summary.json",
                         help="Output JSON summary path")
     args = parser.parse_args()
 
+    # Determine checkpoint path from positional argument or flag
+    chosen_checkpoint = args.checkpoint or args.checkpoint_pos or "./checkpoints/gpuperf_3b_dpo_final"
+
     run_all_in_one_evaluation(
-        checkpoint_path=args.checkpoint,
+        checkpoint_path=chosen_checkpoint,
+        base_model_override=args.base_model,
         sft_data_path=args.sft_data,
         dpo_data_path=args.dpo_data,
         num_samples=args.samples,
