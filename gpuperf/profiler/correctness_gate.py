@@ -63,14 +63,31 @@ class CorrectnessGate:
         }
 
         # --- Tier 1: Syntax & Compilation Gate ---
-        local_scope = {}
-        try:
-            exec(code_str, local_scope, local_scope)
-        except Exception as e:
-            result["rejection_reason"] = f"Tier 1 Syntax Error: {e}"
-            return result
+        # Triton @jit requires inspect.getsource(), so the code must be backed by a real .py file
+        import tempfile
+        import importlib.util
+        import os
 
-        gemm_fn = local_scope.get("gemm_kernel")
+        temp_file = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
+                temp_file = f.name
+                f.write(code_str)
+
+            spec = importlib.util.spec_from_file_location("dynamic_triton_kernel", temp_file)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            gemm_fn = getattr(module, "gemm_kernel", None)
+        except Exception as e:
+            result["rejection_reason"] = f"Tier 1 Syntax/Import Error: {e}"
+            return result
+        finally:
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except Exception:
+                    pass
+
         if gemm_fn is None:
             result["rejection_reason"] = "Tier 1 Error: 'gemm_kernel' function not found in generated code."
             return result
