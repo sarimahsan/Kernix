@@ -151,7 +151,7 @@ Every checkpoint is evaluated through a strict **3-Tier Physical Verification Ga
 | **DPO Preference Accuracy** | 50.0% | **{dpo_accuracy:.1f}%** (15/15 held-out pairs) | **PASS** |
 | **DPO Reward Margin** | 0.0 nats | **+{dpo_margin:.2f} nats** | **PASS** |
 | **Tier 1: Compilation Pass Rate** | ~35.0% | **100.0% Pass Rate** | **PASS** |
-| **Tier 2: Numerical Match** | ~30.0% | **Exact match vs `torch.matmul`** (FP16 diff $\le$ 0.125) | **PASS** |
+| **Tier 2: Numerical Match** | ~30.0% | **Exact match vs `torch.matmul`** (FP16 diff <= 0.125) | **PASS** |
 | **Tier 3: Measured Silicon Speedup** | 0.75x (Stalled) | **{speedup_range} Physical Speedup** | **PASS** |
 
 ### Preference Alignment (DPO) Summary
@@ -163,7 +163,7 @@ Every checkpoint is evaluated through a strict **3-Tier Physical Verification Ga
 ## 🛠️ Training Details
 
 * **Stage 1 (SFT):** Multi-GPU instruction tuning on high-resolution profiler-to-kernel traces across Ampere, Ada Lovelace, Turing, and Blackwell.
-* **Stage 2 (DPO):** Direct Preference Optimization trained strictly on physical speedup pairs ($\text{Winner} = \text{Faster execution time}$, $\text{Loser} = \text{Slower execution time}$).
+* **Stage 2 (DPO):** Direct Preference Optimization trained strictly on physical speedup pairs (Winner = Faster execution time, Loser = Slower execution time).
 * **Hardware Grounding:** NVIDIA Tesla T4 (`sm_75`), NVIDIA L4 (`sm_89`), NVIDIA A100 (`sm_80`), RTX PRO 6000 Server Edition (`sm_120`).
 * **License:** Apache 2.0
 """
@@ -217,37 +217,45 @@ def build_and_export_package(
     os.makedirs(export_dir, exist_ok=True)
 
     # 1. Merge into standalone 16-bit weights
-    print(f"\n[1/3] Merging LoRA weights into full 16-bit standalone model...")
-    try:
-        from unsloth import FastLanguageModel
-        print("Using Unsloth FastLanguageModel for high-speed merging...")
-        model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name=checkpoint_dir,
-            max_seq_length=4096,
-            load_in_4bit=False,
-        )
-        model.save_pretrained_merged(export_dir, tokenizer, save_method=save_method)
-    except ImportError:
-        print("Unsloth not found. Falling back to standard HuggingFace PEFT merge...")
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-        from peft import PeftModel
+    merged_weight_exists = (
+        os.path.exists(os.path.join(export_dir, "model.safetensors")) or
+        os.path.exists(os.path.join(export_dir, "model.safetensors.index.json")) or
+        any(f.startswith("model") and f.endswith(".safetensors") for f in os.listdir(export_dir))
+    )
+    if merged_weight_exists:
+        print("\n[1/3] Standalone merged 16-bit weights already exist in staging directory. Skipping merge step!")
+    else:
+        print(f"\n[1/3] Merging LoRA weights into full 16-bit standalone model...")
+        try:
+            from unsloth import FastLanguageModel
+            print("Using Unsloth FastLanguageModel for high-speed merging...")
+            model, tokenizer = FastLanguageModel.from_pretrained(
+                model_name=checkpoint_dir,
+                max_seq_length=4096,
+                load_in_4bit=False,
+            )
+            model.save_pretrained_merged(export_dir, tokenizer, save_method=save_method)
+        except ImportError:
+            print("Unsloth not found. Falling back to standard HuggingFace PEFT merge...")
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            from peft import PeftModel
 
-        tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir)
-        tokenizer.save_pretrained(export_dir)
+            tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir)
+            tokenizer.save_pretrained(export_dir)
 
-        print(f"Loading base model {base_model_id} in BF16...")
-        base_model = AutoModelForCausalLM.from_pretrained(
-            base_model_id,
-            torch_dtype=torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16,
-            device_map="auto"
-        )
-        print("Loading PEFT LoRA adapter...")
-        peft_model = PeftModel.from_pretrained(base_model, checkpoint_dir)
-        print("Merging and unloading LoRA layers...")
-        merged = peft_model.merge_and_unload()
-        merged.save_pretrained(export_dir, safe_serialization=True)
+            print(f"Loading base model {base_model_id} in BF16...")
+            base_model = AutoModelForCausalLM.from_pretrained(
+                base_model_id,
+                torch_dtype=torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16,
+                device_map="auto"
+            )
+            print("Loading PEFT LoRA adapter...")
+            peft_model = PeftModel.from_pretrained(base_model, checkpoint_dir)
+            print("Merging and unloading LoRA layers...")
+            merged = peft_model.merge_and_unload()
+            merged.save_pretrained(export_dir, safe_serialization=True)
 
-    print("✅ Standalone merged weights saved to root directory!")
+        print("✅ Standalone merged weights saved to root directory!")
 
     # 2. Package the adapter/ folder
     adapter_staging_dir = os.path.join(export_dir, "adapter")
