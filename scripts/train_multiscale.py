@@ -117,14 +117,17 @@ def detect_hardware_and_configure(
             config["dpo_grad_accum"] = 16
             config["max_seq_length"] = 2048
         else:  # A100-80GB / H100 (80GB+)
-            if precision_mode == "16bit" and model_size in ["14b", "27b"]:
+            if precision_mode == "16bit" or (precision_mode == "auto" and model_size == "14b"):
                 config["load_in_4bit"] = False
-                config["sft_batch_size"] = 1
-                config["sft_grad_accum"] = 16
+                config["sft_batch_size"] = 4 if model_size == "14b" else 2
+                config["sft_grad_accum"] = 4 if model_size == "14b" else 8
+                config["dpo_batch_size"] = 2 if model_size == "14b" else 1
+                config["dpo_grad_accum"] = 8 if model_size == "14b" else 16
+                config["max_seq_length"] = 4096
             else:
                 config["load_in_4bit"] = True
-                config["sft_batch_size"] = 4
-                config["sft_grad_accum"] = 4
+                config["sft_batch_size"] = 8 if model_size == "14b" else 4
+                config["sft_grad_accum"] = 2 if model_size == "14b" else 4
                 config["max_seq_length"] = 4096
 
     if precision_mode == "4bit":
