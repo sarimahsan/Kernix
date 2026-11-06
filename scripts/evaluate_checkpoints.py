@@ -153,6 +153,18 @@ def run_all_in_one_evaluation(
         test_dpo = dpo_records[-num_samples:]
 
     # 2. Determine Architectures
+    # Suppress Colab torchao version incompatibility (PEFT raises error on torchao 0.10.0)
+    try:
+        import peft.import_utils
+        peft.import_utils.is_torchao_available = lambda: False
+    except Exception:
+        pass
+    try:
+        import peft.tuners.lora.torchao
+        peft.tuners.lora.torchao.is_torchao_available = lambda: False
+    except Exception:
+        pass
+
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from peft import PeftModel
 
