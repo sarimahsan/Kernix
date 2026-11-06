@@ -109,6 +109,19 @@ class CorrectnessGate:
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             gemm_fn = getattr(module, "gemm_kernel", None)
+            if gemm_fn is None:
+                for candidate in ["matmul_kernel", "triton_gemm", "gemm", "kernel"]:
+                    if hasattr(module, candidate):
+                        gemm_fn = getattr(module, candidate)
+                        break
+            if gemm_fn is None:
+                for attr_name in dir(module):
+                    if attr_name.startswith("_") or attr_name in ["torch", "triton", "tl"]:
+                        continue
+                    attr = getattr(module, attr_name)
+                    if callable(attr) and hasattr(attr, "__name__"):
+                        gemm_fn = attr
+                        break
         except Exception as e:
             result["rejection_reason"] = f"Tier 1 Syntax/Import Error: {e}"
             return result
@@ -120,7 +133,7 @@ class CorrectnessGate:
                     pass
 
         if gemm_fn is None:
-            result["rejection_reason"] = "Tier 1 Error: 'gemm_kernel' function not found in generated code."
+            result["rejection_reason"] = "Tier 1 Error: No valid GEMM kernel function found in generated code."
             return result
 
         # --- Tier 2: Numerical Correctness Gate ---
@@ -244,6 +257,19 @@ class CorrectnessGate:
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             norm_fn = getattr(module, "rmsnorm_kernel", None)
+            if norm_fn is None:
+                for candidate in ["rms_norm_kernel", "norm_kernel", "rmsnorm", "kernel"]:
+                    if hasattr(module, candidate):
+                        norm_fn = getattr(module, candidate)
+                        break
+            if norm_fn is None:
+                for attr_name in dir(module):
+                    if attr_name.startswith("_") or attr_name in ["torch", "triton", "tl"]:
+                        continue
+                    attr = getattr(module, attr_name)
+                    if callable(attr) and hasattr(attr, "__name__"):
+                        norm_fn = attr
+                        break
         except Exception as e:
             result["rejection_reason"] = f"Tier 1 Syntax/Import Error: {e}"
             return result
@@ -255,7 +281,7 @@ class CorrectnessGate:
                     pass
 
         if norm_fn is None:
-            result["rejection_reason"] = "Tier 1 Error: 'rmsnorm_kernel' function not found in generated code."
+            result["rejection_reason"] = "Tier 1 Error: No valid RMSNorm kernel function found in generated code."
             return result
 
         try:
