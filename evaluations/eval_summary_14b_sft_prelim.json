@@ -1,0 +1,74 @@
+{
+  "checkpoint": "./checkpoints/gpuperf_14b_sft",
+  "base_model": "Qwen/Qwen2.5-Coder-14B-Instruct",
+  "metrics": {
+    "base_ppl": 3.47,
+    "finetuned_ppl": 1.04,
+    "ppl_reduction_pct": 70.0,
+    "dpo_accuracy_pct": 100.0,
+    "dpo_avg_margin_nats": 0.04,
+    "compilation_pass_rate_pct": 100.0,
+    "numerical_accuracy_rate_pct": 0.0,
+    "speedup_pass_rate_pct": 0.0,
+    "mean_empirical_speedup": 1.0
+  },
+  "sample_count": 5,
+  "hardware": "NVIDIA A100-SXM4-80GB",
+  "detailed_results": [
+    {
+      "sample_idx": 1,
+      "device": "NVIDIA A100-SXM4-80GB",
+      "arch": "sm_80",
+      "has_code": true,
+      "compilation_passed": true,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null,
+      "rejection_reason": "Tier 2 Numerical Mismatch: Max error 8.6953 exceeds FP16 tolerance."
+    },
+    {
+      "sample_idx": 2,
+      "device": "NVIDIA A100-SXM4-80GB",
+      "arch": "sm_80",
+      "has_code": true,
+      "compilation_passed": true,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null,
+      "rejection_reason": "Tier 2 Numerical Mismatch: Max error 9.3438 exceeds FP16 tolerance."
+    },
+    {
+      "sample_idx": 3,
+      "device": "NVIDIA A100-SXM4-80GB",
+      "arch": "sm_80",
+      "has_code": true,
+      "compilation_passed": true,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null,
+      "rejection_reason": "Tier 2 Numerical Mismatch: Max error 10.8281 exceeds FP16 tolerance."
+    },
+    {
+      "sample_idx": 4,
+      "device": "NVIDIA A100-SXM4-80GB",
+      "arch": "sm_80",
+      "has_code": true,
+      "compilation_passed": true,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null,
+      "rejection_reason": "Tier 2 Numerical Mismatch: Max error 9.0469 exceeds FP16 tolerance."
+    },
+    {
+      "sample_idx": 5,
+      "device": "NVIDIA A100-SXM4-80GB",
+      "arch": "sm_80",
+      "has_code": true,
+      "compilation_passed": true,
+      "numerical_passed": false,
+      "measured_latency_us": null,
+      "speedup": null,
+      "rejection_reason": "Tier 2 Numerical Mismatch: Max error 9.5078 exceeds FP16 tolerance."
+    }
+  ]
+}

@@ -73,7 +73,7 @@ def run_all_in_one_evaluation(
     dpo_data_path: str = "./data/dpo_multi_gpu.jsonl",
     num_samples: int = 15,
     operator: str = "all",
-    output_json_path: str = "./eval_summary.json",
+    output_json_path: str = "./evaluations/eval_summary.json",
     push_to_hf: bool = False,
     repo_id: str | None = None,
     hf_token: str | None = None,
@@ -504,6 +504,9 @@ def run_all_in_one_evaluation(
         "detailed_results": detailed_results
     }
 
+    if os.path.dirname(output_json_path):
+        os.makedirs(os.path.dirname(output_json_path), exist_ok=True)
+
     with open(output_json_path, "w", encoding="utf-8") as f:
         json.dump(summary_data, f, indent=2)
 
@@ -569,7 +572,7 @@ def main():
                         help="Path to SFT data")
     parser.add_argument("--dpo_data", type=str, default="./data/dpo_multi_gpu.jsonl",
                         help="Path to DPO data")
-    parser.add_argument("-o", "--output_json", type=str, default="./eval_summary.json",
+    parser.add_argument("-o", "--output_json", type=str, default="./evaluations/eval_summary.json",
                         help="Output JSON summary path")
     parser.add_argument("--operator", type=str, default="all", choices=["all", "gemm", "rmsnorm"],
                         help="Filter evaluation samples by operator type ('all', 'gemm', 'rmsnorm')")

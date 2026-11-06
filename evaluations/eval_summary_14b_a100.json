@@ -1,0 +1,77 @@
+{
+  "checkpoint": "sarimahsan101/Kernix-14B",
+  "base_model": "Qwen/Qwen2.5-Coder-14B-Instruct",
+  "metrics": {
+    "base_ppl": 1.98,
+    "finetuned_ppl": 1.98,
+    "ppl_reduction_pct": -0.1,
+    "base_dpo_accuracy_pct": 0.0,
+    "base_dpo_avg_margin_nats": -0.01,
+    "dpo_accuracy_pct": 100.0,
+    "dpo_avg_margin_nats": 0.01,
+    "base_compilation_pass_rate_pct": 35.0,
+    "compilation_pass_rate_pct": 100.0,
+    "numerical_accuracy_rate_pct": 100.0,
+    "speedup_pass_rate_pct": 100.0,
+    "mean_empirical_speedup": 1.44
+  },
+  "sample_count": 5,
+  "hardware": "NVIDIA A100-SXM4-40GB",
+  "detailed_results": [
+    {
+      "sample_idx": 1,
+      "device": "NVIDIA A100-SXM4-80GB",
+      "arch": "sm_80",
+      "has_code": true,
+      "compilation_passed": true,
+      "numerical_passed": true,
+      "measured_latency_us": 163.28320503234863,
+      "speedup": 1.4781584021479446,
+      "rejection_reason": null
+    },
+    {
+      "sample_idx": 2,
+      "device": "NVIDIA A100-SXM4-80GB",
+      "arch": "sm_80",
+      "has_code": true,
+      "compilation_passed": true,
+      "numerical_passed": true,
+      "measured_latency_us": 160.4522705078125,
+      "speedup": 1.50517251067482,
+      "rejection_reason": null
+    },
+    {
+      "sample_idx": 3,
+      "device": "NVIDIA A100-SXM4-80GB",
+      "arch": "sm_80",
+      "has_code": true,
+      "compilation_passed": true,
+      "numerical_passed": true,
+      "measured_latency_us": 159.32374000549316,
+      "speedup": 1.5147323834723876,
+      "rejection_reason": null
+    },
+    {
+      "sample_idx": 4,
+      "device": "NVIDIA A100-SXM4-80GB",
+      "arch": "sm_80",
+      "has_code": true,
+      "compilation_passed": true,
+      "numerical_passed": true,
+      "measured_latency_us": 207.88052876790363,
+      "speedup": 1.1607687526875736,
+      "rejection_reason": null
+    },
+    {
+      "sample_idx": 5,
+      "device": "NVIDIA A100-SXM4-80GB",
+      "arch": "sm_80",
+      "has_code": true,
+      "compilation_passed": true,
+      "numerical_passed": true,
+      "measured_latency_us": 158.75412623087564,
+      "speedup": 1.519103919364402,
+      "rejection_reason": null
+    }
+  ]
+}

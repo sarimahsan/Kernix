@@ -9,7 +9,7 @@ env/
 venv/
 .venv/
 
-# Checkpoints and Models
+# Checkpoints and Trained Model Weights
 checkpoints/
 *.pt
 *.bin
@@ -17,31 +17,26 @@ checkpoints/
 adapter_config.json
 adapter_model.safetensors
 
-# Data & Profiles
+# Dataset Files & Hardware Profiles
+# Full dataset hosted on Hugging Face: https://huggingface.co/datasets/sarimahsan101/Kernix-NCU-dataset
+data/
+*.jsonl
 *.ncu-rep
 *.csv
 
-# Ignore massive raw multi-hundred MB execution traces (>100MB blocks GitHub push)
-data/raw/harvest_nvidia_l4.jsonl
-data/raw/harvest_nvidia_a100_sxm4_80gb.jsonl
-data/raw/harvest_rtx_pro_6000_blackwell.jsonl
-*.jsonl
-
-# Whitelist compiled training datasets and aggregated profiles for Colab training
-!data/sft_multi_gpu.jsonl
-!data/dpo_multi_gpu.jsonl
-!data/raw/harvest_tesla_t4.jsonl
-!data/raw/harvest_nvidia_l4_aggregated.jsonl
-!data/raw/harvest_nvidia_a100_aggregated.jsonl
-!data/raw/harvest_rtx_pro_6000_blackwell_aggregated.jsonl
-
-
-
-# Logs & Evaluation Summaries
+# Logs & Export Distributions
 wandb/
 logs/
 .system_generated/
-eval_summary*.json
 exports/
 
+# Evaluation Reports
+eval_summary*.json
+!evaluations/
+!evaluations/*.json
 
+# Publishing & Release Scripts (Local Only)
+scripts/publish_hf.py
+scripts/publish_dataset.py
+publish_hf.py
+publish_dataset.py
