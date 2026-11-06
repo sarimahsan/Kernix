@@ -106,7 +106,20 @@ def run_all_in_one_evaluation(
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from peft import PeftModel
 
-    base_model_id = base_model_override or "Qwen/Qwen2.5-Coder-3B-Instruct"
+    is_hf_repo = (not os.path.exists(checkpoint_path)) and ("/" in checkpoint_path)
+
+    # Auto-infer base model if not explicitly overridden
+    if base_model_override:
+        base_model_id = base_model_override
+    elif "14b" in checkpoint_path.lower():
+        base_model_id = "Qwen/Qwen2.5-Coder-14B-Instruct"
+    elif "27b" in checkpoint_path.lower():
+        base_model_id = "Qwen/Qwen3.6-27B"
+    elif "32b" in checkpoint_path.lower():
+        base_model_id = "Qwen/Qwen2.5-Coder-32B-Instruct"
+    else:
+        base_model_id = "Qwen/Qwen2.5-Coder-3B-Instruct"
+
     adapter_cfg_file = os.path.join(checkpoint_path, "adapter_config.json")
     if os.path.exists(adapter_cfg_file) and not base_model_override:
         try:
@@ -115,7 +128,6 @@ def run_all_in_one_evaluation(
                 inferred = cfg.get("base_model_name_or_path")
                 if inferred:
                     clean = inferred.replace("unsloth/", "").replace("-bnb-4bit", "")
-                    # Ensure Hugging Face org namespace (e.g. Qwen/...)
                     if "/" not in clean:
                         clean = f"Qwen/{clean}"
                     base_model_id = clean
@@ -126,7 +138,7 @@ def run_all_in_one_evaluation(
     print(f"\n[1/5] Loading Tokenizer & Base Model: {base_model_id}...")
 
     tokenizer = AutoTokenizer.from_pretrained(
-        checkpoint_path if os.path.exists(checkpoint_path) else base_model_id,
+        checkpoint_path if (os.path.exists(checkpoint_path) or is_hf_repo) else base_model_id,
         trust_remote_code=True
     )
 
@@ -157,21 +169,35 @@ def run_all_in_one_evaluation(
         avg_loss = total_loss / total_tokens
         return avg_loss, float(np.exp(avg_loss))
 
-    # Evaluate pure base model BEFORE attaching LoRA (PeftModel mutates base_model in-place!)
+    # Evaluate pure base model BEFORE attaching LoRA / loading weights
     base_loss, base_ppl = calc_ppl(base_model)
 
     has_adapter = os.path.exists(checkpoint_path) and os.path.exists(os.path.join(checkpoint_path, "adapter_config.json"))
-    if has_adapter:
+    has_fine_tuned = False
+
+    if is_hf_repo:
+        print(f"\n[3/5] Pulling Merged Fine-Tuned Model from Hugging Face Hub: {checkpoint_path}...")
+        eval_model = AutoModelForCausalLM.from_pretrained(
+            checkpoint_path,
+            torch_dtype=dtype,
+            device_map="auto" if torch.cuda.is_available() else None,
+            trust_remote_code=True
+        )
+        eval_model.eval()
+        has_fine_tuned = True
+        ft_loss, ft_ppl = calc_ppl(eval_model)
+    elif has_adapter:
         print(f"\n[3/5] Loading LoRA Adapter from: {checkpoint_path}...")
         eval_model = PeftModel.from_pretrained(base_model, checkpoint_path)
         eval_model.eval()
+        has_fine_tuned = True
         ft_loss, ft_ppl = calc_ppl(eval_model)
     else:
-        print("\n[!] No adapter found. Evaluating Base Model only.")
+        print("\n[!] No adapter or remote repo found. Evaluating Base Model only.")
         eval_model = base_model
         ft_loss, ft_ppl = base_loss, base_ppl
 
-    ppl_reduction = ((base_ppl - ft_ppl) / base_ppl) * 100 if has_adapter else 0.0
+    ppl_reduction = ((base_ppl - ft_ppl) / base_ppl) * 100 if has_fine_tuned else 0.0
 
     print(f"  * Base Model Loss:      {base_loss:.4f} | Perplexity (PPL): {base_ppl:.2f}")
     print(f"  * Fine-Tuned Loss:      {ft_loss:.4f} | Perplexity (PPL): {ft_ppl:.2f}")
@@ -304,7 +330,9 @@ def run_all_in_one_evaluation(
     print("=" * 80)
     print("                     OFFICIAL PUBLICATION BENCHMARK REPORT")
     print("=" * 80)
-    print(f"| Metric                                | Base Qwen2.5-3B | GPUPerf-3B Final (Ours) |")
+    model_name_label = checkpoint_path.split("/")[-1]
+    base_name_label = base_model_id.split("/")[-1]
+    print(f"| Metric                                | {base_name_label} (Base) | {model_name_label} (Ours) |")
     print(f"| :------------------------------------ | :-------------: | :---------------------: |")
     print(f"| **Held-Out Perplexity (PPL)**         | {base_ppl:.2f}           | **{ft_ppl:.2f}** ({ppl_reduction:.1f}% drop)     |")
     print(f"| **DPO Preference Accuracy**           | 50.0%           | **{dpo_accuracy:.1f}%**                 |")
