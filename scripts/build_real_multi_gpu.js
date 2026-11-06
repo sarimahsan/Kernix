@@ -121,34 +121,34 @@ def swiglu_kernel(
   return `# Kernel implementation for ${operator}\n# Config: ${JSON.stringify(cfg)}`;
 }
 
-  async function aggregateHardwareFile(filePath) {
-    const rl = readline.createInterface({
-      input: fs.createReadStream(filePath),
-      crlfDelay: Infinity
-    });
+async function aggregateHardwareFile(filePath) {
+  const rl = readline.createInterface({
+    input: fs.createReadStream(filePath),
+    crlfDelay: Infinity
+  });
 
-    const configStats = {};
+  const configStats = {};
 
-    for await (const line of rl) {
-      if (!line.trim()) continue;
-      try {
-        const r = JSON.parse(line);
-        const key = r.operator + ' | ' + JSON.stringify(r.config);
-        if (!configStats[key]) {
-          configStats[key] = {
-            device: r.device,
-            arch: r.arch,
-            num_sms: r.num_sms,
-            peak_bandwidth_gbs: r.peak_bandwidth_gbs,
-            operator: r.operator,
-            config: r.config,
-            latencies: [],
-            speedups: [],
-            pir: r.pir
-          };
-        }
-        configStats[key].latencies.push(r.measured_latency_us);
-        configStats[key].speedups.push(r.speedup_vs_baseline);
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    try {
+      const r = JSON.parse(line);
+      const key = r.operator + ' | ' + JSON.stringify(r.config);
+      if (!configStats[key]) {
+        configStats[key] = {
+          device: r.device,
+          arch: r.arch,
+          num_sms: r.num_sms,
+          peak_bandwidth_gbs: r.peak_bandwidth_gbs,
+          operator: r.operator,
+          config: r.config,
+          latencies: [],
+          speedups: [],
+          pir: r.pir
+        };
+      }
+      configStats[key].latencies.push(r.measured_latency_us);
+      configStats[key].speedups.push(r.speedup_vs_baseline);
     } catch (e) { }
   }
 
@@ -282,57 +282,57 @@ async function main() {
   });
 
   const dpoRecords = [];
-  allChosen.forEach((chosen) => {
-    const hw = chosen.pir && chosen.pir.hardware ? chosen.pir.hardware : { device: chosen.device, arch: chosen.arch, num_sms: chosen.num_sms, peak_dram_bandwidth_gbs: chosen.peak_bandwidth_gbs };
-    const chosenCfg = chosen.config;
-    const op = chosen.operator;
-    const key = `${chosen.device}__${chosen.operator}`;
-    
-    // Pick the best match from same hardware/operator, else fallback to any rejected
-    let rejected = null;
-    if (rejectedPool[key] && rejectedPool[key].length > 0) {
-      // Pick one and rotate
-      rejected = rejectedPool[key].shift();
-      rejectedPool[key].push(rejected); // rotate so we don't exhaust
-    } else if (allRejected.length > 0) {
-      rejected = allRejected[Math.floor(Math.random() * allRejected.length)];
-    }
+      allChosen.forEach((chosen) => {
+        const hw = chosen.pir && chosen.pir.hardware ? chosen.pir.hardware : { device: chosen.device, arch: chosen.arch, num_sms: chosen.num_sms, peak_dram_bandwidth_gbs: chosen.peak_bandwidth_gbs };
+        const chosenCfg = chosen.config;
+        const op = chosen.operator;
+        const key = `${chosen.device}__${chosen.operator}`;
 
-    if (rejected) {
-      const rejCfg = rejected.config;
-      const baseCfg = baselineConfigs[op] || chosenCfg;
-      const initialCode = renderKernelCode(op, baseCfg, false, hw.device);
-      const chosenCode = renderKernelCode(op, chosenCfg, true, hw.device);
-      const rejectedCode = renderKernelCode(op, rejCfg, false, rejected.device);
+        // Pick the best match from same hardware/operator, else fallback to any rejected
+        let rejected = null;
+        if (rejectedPool[key] && rejectedPool[key].length > 0) {
+          // Pick one and rotate
+          rejected = rejectedPool[key].shift();
+          rejectedPool[key].push(rejected); // rotate so we don't exhaust
+        } else if (allRejected.length > 0) {
+          rejected = allRejected[Math.floor(Math.random() * allRejected.length)];
+        }
 
-      dpoRecords.push({
-        prompt: `Here is a TRITON GPU kernel and its hardware profiling report from NVIDIA Nsight Compute:\n\n\`\`\`triton\n${initialCode}\n\`\`\`\n\n[PROFILER REPORT]\nDevice: ${hw.device} (${hw.arch}, ${hw.num_sms} SMs, ${hw.peak_dram_bandwidth_gbs} GB/s DRAM)\nKernel: ${chosen.pir ? chosen.pir.kernel_name : op}\nBottleneck: ${chosen.pir && chosen.pir.diagnosis ? chosen.pir.diagnosis.primary_bottleneck : 'ResourceContention'}\n[/PROFILER REPORT]\n\nAnalyze the profiler metrics and write an optimized kernel for ${hw.device}.`,
-        chosen: `### Bottleneck Diagnosis\nOptimized specifically for ${hw.device} (${hw.arch}) architecture.\n\n### Optimized TRITON Kernel\n\`\`\`triton\n${chosenCode}\n\`\`\`\n\n### Verification\nAchieved ${chosen.speedup_vs_baseline.toFixed(2)}x physical speedup on ${hw.device} (${chosen.measured_latency_us.toFixed(1)} us).`,
-        rejected: `### Bottleneck Diagnosis\nFailed to respect ${rejected.arch} hardware limits.\n\n### Optimized TRITON Kernel\n\`\`\`triton\n${rejectedCode}\n\`\`\`\n\n### Verification\nResulted in ${rejected.speedup_vs_baseline.toFixed(2)}x slowdown on ${rejected.device} (${rejected.measured_latency_us.toFixed(1)} us).`,
-        metadata: {
-          device: hw.device,
-          arch: hw.arch,
-          operator: op,
-          chosen_config: chosenCfg,
-          chosen_speedup: chosen.speedup_vs_baseline,
+        if (rejected) {
+          const rejCfg = rejected.config;
+          const baseCfg = baselineConfigs[op] || chosenCfg;
+          const initialCode = renderKernelCode(op, baseCfg, false, hw.device);
+          const chosenCode = renderKernelCode(op, chosenCfg, true, hw.device);
+          const rejectedCode = renderKernelCode(op, rejCfg, false, rejected.device);
+
+          dpoRecords.push({
+            prompt: `Here is a TRITON GPU kernel and its hardware profiling report from NVIDIA Nsight Compute:\n\n\`\`\`triton\n${initialCode}\n\`\`\`\n\n[PROFILER REPORT]\nDevice: ${hw.device} (${hw.arch}, ${hw.num_sms} SMs, ${hw.peak_dram_bandwidth_gbs} GB/s DRAM)\nKernel: ${chosen.pir ? chosen.pir.kernel_name : op}\nBottleneck: ${chosen.pir && chosen.pir.diagnosis ? chosen.pir.diagnosis.primary_bottleneck : 'ResourceContention'}\n[/PROFILER REPORT]\n\nAnalyze the profiler metrics and write an optimized kernel for ${hw.device}.`,
+            chosen: `### Bottleneck Diagnosis\nOptimized specifically for ${hw.device} (${hw.arch}) architecture.\n\n### Optimized TRITON Kernel\n\`\`\`triton\n${chosenCode}\n\`\`\`\n\n### Verification\nAchieved ${chosen.speedup_vs_baseline.toFixed(2)}x physical speedup on ${hw.device} (${chosen.measured_latency_us.toFixed(1)} us).`,
+            rejected: `### Bottleneck Diagnosis\nFailed to respect ${rejected.arch} hardware limits.\n\n### Optimized TRITON Kernel\n\`\`\`triton\n${rejectedCode}\n\`\`\`\n\n### Verification\nResulted in ${rejected.speedup_vs_baseline.toFixed(2)}x slowdown on ${rejected.device} (${rejected.measured_latency_us.toFixed(1)} us).`,
+            metadata: {
+              device: hw.device,
+              arch: hw.arch,
+              operator: op,
+              chosen_config: chosenCfg,
+              chosen_speedup: chosen.speedup_vs_baseline,
           chosen_latency_us: chosen.measured_latency_us,
-          rejected_config: rejCfg,
-          rejected_speedup: rejected.speedup_vs_baseline,
-          rejected_latency_us: rejected.measured_latency_us
+              rejected_config: rejCfg,
+              rejected_speedup: rejected.speedup_vs_baseline,
+              rejected_latency_us: rejected.measured_latency_us
+            }
+          });
         }
       });
+
+      const sftPath = path.join(dataDir, 'sft_multi_gpu.jsonl');
+      const dpoPath = path.join(dataDir, 'dpo_multi_gpu.jsonl');
+
+      fs.writeFileSync(sftPath, sftRecords.map(r => JSON.stringify(r)).join('\n') + '\n');
+      fs.writeFileSync(dpoPath, dpoRecords.map(r => JSON.stringify(r)).join('\n') + '\n');
+
+      console.log(`\n[+] Successfully compiled ${sftRecords.length} Quad-GPU Full-Code SFT samples to ${sftPath}`);
+      console.log(`[+] Successfully compiled ${dpoRecords.length} Quad-GPU Full-Code DPO pairs to ${dpoPath}`);
+      console.log("=== Quad-GPU Physical Compilation Complete ===");
     }
-  });
 
-  const sftPath = path.join(dataDir, 'sft_multi_gpu.jsonl');
-  const dpoPath = path.join(dataDir, 'dpo_multi_gpu.jsonl');
-
-  fs.writeFileSync(sftPath, sftRecords.map(r => JSON.stringify(r)).join('\n') + '\n');
-  fs.writeFileSync(dpoPath, dpoRecords.map(r => JSON.stringify(r)).join('\n') + '\n');
-
-  console.log(`\n[+] Successfully compiled ${sftRecords.length} Quad-GPU Full-Code SFT samples to ${sftPath}`);
-  console.log(`[+] Successfully compiled ${dpoRecords.length} Quad-GPU Full-Code DPO pairs to ${dpoPath}`);
-  console.log("=== Quad-GPU Physical Compilation Complete ===");
-}
-
-main();
+    main();
