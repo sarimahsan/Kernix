@@ -79,7 +79,8 @@ def run_all_in_one_evaluation(
     hf_token: str | None = None,
     eval_base_gate: bool = False,
     skip_base: bool = False,
-    precision: str = "auto"
+    precision: str = "auto",
+    force_merged: bool = False
 ):
     print("=" * 80)
     print("            GPUPERF ALL-IN-ONE BENCHMARK & EVALUATION SUITE")
@@ -247,7 +248,7 @@ def run_all_in_one_evaluation(
             with torch.no_grad():
                 outputs = model_obj.generate(
                     **tokenized_inputs,
-                    max_new_tokens=768,
+                    max_new_tokens=1024,
                     do_sample=False,
                     pad_token_id=tokenizer.eos_token_id
                 )
@@ -267,8 +268,14 @@ def run_all_in_one_evaluation(
 
             if gate_res["tier1_compilation_passed"]:
                 tier1_comp_pass += 1
+            else:
+                print(f"\n    [!] Tier 1 Rejection on sample {idx + 1}: {gate_res.get('rejection_reason')}")
+
             if gate_res["tier2_numerical_passed"]:
                 tier2_num_pass += 1
+            elif gate_res["tier1_compilation_passed"]:
+                print(f"\n    [!] Tier 2 Rejection on sample {idx + 1}: {gate_res.get('rejection_reason')}")
+
             if gate_res.get("tier3_speedup_passed", False):
                 tier3_speedup_pass += 1
                 if gate_res.get("speedup_vs_baseline"):
@@ -343,8 +350,14 @@ def run_all_in_one_evaluation(
         # CRITICAL VRAM PURGE: Unload base model completely from GPU!
         # -------------------------------------------------------------
         print(f"\n[i] Offloading Base Model from VRAM to preserve memory on {gpu_name}...")
-        free_memory(base_model)
+        del base_model
+        gc.collect()
         if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            try:
+                torch.cuda.ipc_collect()
+            except Exception:
+                pass
             vram_mb = torch.cuda.memory_allocated() / (1024**2)
             print(f"[i] VRAM successfully cleared: {vram_mb:.1f} MB in use.")
     else:
@@ -360,7 +373,31 @@ def run_all_in_one_evaluation(
     has_fine_tuned = False
     eval_model = None
 
-    if is_hf_repo or has_local_merged:
+    hf_has_adapter = False
+    if is_hf_repo:
+        try:
+            from huggingface_hub import HfApi
+            api = HfApi()
+            repo_files = api.list_repo_files(repo_id=checkpoint_path)
+            if any(f.startswith("adapter/") for f in repo_files):
+                hf_has_adapter = True
+                print(f"[i] Detected LoRA adapter package in '{checkpoint_path}/adapter'.")
+        except Exception:
+            pass
+
+    if is_hf_repo and hf_has_adapter and not force_merged:
+        print(f"[1/3] Loading Base Model + LoRA Adapter from Hugging Face Hub: {checkpoint_path} (subfolder='adapter')...")
+        base_for_lora = AutoModelForCausalLM.from_pretrained(
+            base_model_id,
+            torch_dtype=dtype,
+            device_map="auto" if torch.cuda.is_available() else None,
+            quantization_config=bnb_config if load_in_4bit else None,
+            trust_remote_code=True
+        )
+        eval_model = PeftModel.from_pretrained(base_for_lora, checkpoint_path, subfolder="adapter")
+        eval_model.eval()
+        has_fine_tuned = True
+    elif is_hf_repo or has_local_merged:
         load_source = "Hugging Face Hub" if is_hf_repo else "Local Merged Directory"
         print(f"[1/3] Loading Standalone Merged Model from {load_source}: {checkpoint_path}...")
         eval_model = AutoModelForCausalLM.from_pretrained(
@@ -418,7 +455,10 @@ def run_all_in_one_evaluation(
     ft_gate_metrics = eval_hardware_gate(eval_model, tag="Ours")
 
     # Clean up fine-tuned model
-    free_memory(eval_model)
+    del eval_model
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     # -------------------------------------------------------------
     # PUBLICATION SUMMARY REPORT
@@ -527,6 +567,8 @@ def main():
                         help="Skip Phase 1 (Base Model evaluation) to save time")
     parser.add_argument("--precision", type=str, default="auto", choices=["auto", "bf16", "fp16", "4bit", "8bit"],
                         help="Precision format for model loading ('auto', 'bf16', '4bit')")
+    parser.add_argument("--force_merged", action="store_true",
+                        help="Force loading root merged weights from HF Hub instead of adapter subfolder")
     parser.add_argument("--push_to_hf", action="store_true",
                         help="Automatically merge and push to Hugging Face Hub upon completing evaluation")
     parser.add_argument("--repo_id", type=str, default="sarimahsan/Kernix-3B",
@@ -551,7 +593,8 @@ def main():
         hf_token=args.hf_token,
         eval_base_gate=args.eval_base_gate,
         skip_base=args.skip_base,
-        precision=args.precision
+        precision=args.precision,
+        force_merged=args.force_merged
     )
 
 

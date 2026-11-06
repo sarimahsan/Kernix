@@ -24,17 +24,42 @@ class CorrectnessGate:
     @staticmethod
     def extract_triton_code(markdown_text: str) -> Tuple[Optional[str], Dict[str, Any]]:
         """Extracts the Python/Triton code block and parsed launch configuration from LLM markdown response."""
+        code_str = None
+        # 1. Closed code block
         code_match = re.search(r"```(?:triton|python)?\s*\n(.*?)\n```", markdown_text, re.DOTALL)
-        if not code_match:
+        if code_match:
+            code_str = code_match.group(1).strip()
+        else:
+            # 2. Unclosed code block (if generation reached token limit before final backticks)
+            code_match_unclosed = re.search(r"```(?:triton|python)?\s*\n(.*)", markdown_text, re.DOTALL)
+            if code_match_unclosed:
+                candidate = code_match_unclosed.group(1).strip()
+                if "def gemm_kernel" in candidate or "def rmsnorm_kernel" in candidate:
+                    code_str = candidate
+            elif "def gemm_kernel" in markdown_text or "def rmsnorm_kernel" in markdown_text:
+                # 3. Raw Python code without markdown fences
+                code_str = markdown_text.strip()
+
+        if not code_str:
             return None, {}
 
-        code_str = code_match.group(1).strip()
-
-        # Parse launch config comments e.g. '# Launch Config for NVIDIA A100: num_warps=8, num_stages=4'
-        launch_config = {"num_warps": 4, "num_stages": 3, "BLOCK_SIZE": 8192}
+        # Parse launch config comments and kernel parameter constants
+        launch_config = {
+            "num_warps": 4,
+            "num_stages": 3,
+            "BLOCK_SIZE": 8192,
+            "BLOCK_M": 128,
+            "BLOCK_N": 128,
+            "BLOCK_K": 64,
+            "GROUP_M": 8
+        }
         warps_match = re.search(r"num_warps\s*[:=]\s*(\d+)", code_str)
         stages_match = re.search(r"num_stages\s*[:=]\s*(\d+)", code_str)
         block_match = re.search(r"BLOCK_SIZE.*?=\s*(\d+)", code_str)
+        bm_match = re.search(r"BLOCK_M.*?=\s*(\d+)", code_str)
+        bn_match = re.search(r"BLOCK_N.*?=\s*(\d+)", code_str)
+        bk_match = re.search(r"BLOCK_K.*?=\s*(\d+)", code_str)
+        gm_match = re.search(r"GROUP_M.*?=\s*(\d+)", code_str)
 
         if warps_match:
             launch_config["num_warps"] = int(warps_match.group(1))
@@ -42,6 +67,14 @@ class CorrectnessGate:
             launch_config["num_stages"] = int(stages_match.group(1))
         if block_match:
             launch_config["BLOCK_SIZE"] = int(block_match.group(1))
+        if bm_match:
+            launch_config["BLOCK_M"] = int(bm_match.group(1))
+        if bn_match:
+            launch_config["BLOCK_N"] = int(bn_match.group(1))
+        if bk_match:
+            launch_config["BLOCK_K"] = int(bk_match.group(1))
+        if gm_match:
+            launch_config["GROUP_M"] = int(gm_match.group(1))
 
         return code_str, launch_config
 
@@ -100,11 +133,20 @@ class CorrectnessGate:
             # PyTorch golden reference
             c_ref = torch.matmul(a, b)
 
+            block_m = launch_config.get("BLOCK_M", 128)
+            block_n = launch_config.get("BLOCK_N", 128)
             num_warps = launch_config.get("num_warps", 4)
-            num_stages = launch_config.get("num_stages", 3)
+            num_stages = min(launch_config.get("num_stages", 3), 4)
+
+            # Hardware shared memory safety check: max 164 KB per block on sm_80
+            stage_bytes = (block_m * 64 + 64 * block_n) * 2
+            if stage_bytes * num_stages > 160 * 1024:
+                num_stages = max(2, (150 * 1024) // max(stage_bytes, 1))
 
             def grid_fn(META):
-                return (triton.cdiv(M, META.get("BLOCK_M", 64)) * triton.cdiv(N, META.get("BLOCK_N", 64)),)
+                bm = META.get("BLOCK_M", block_m)
+                bn = META.get("BLOCK_N", block_n)
+                return (triton.cdiv(M, bm) * triton.cdiv(N, bn),)
 
             # Warmup execution (compiles Triton JIT)
             gemm_fn[grid_fn](
