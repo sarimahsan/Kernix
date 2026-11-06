@@ -292,7 +292,7 @@ def run_training_pipeline(
             args=DPOConfig(
                 per_device_train_batch_size=config["dpo_batch_size"],
                 gradient_accumulation_steps=config["dpo_grad_accum"],
-                warmup_ratio=0.1,
+                warmup_steps=10,
                 num_train_epochs=dpo_epochs,
                 learning_rate=config["learning_rate_dpo"],
                 fp16=not is_bfloat16_supported(),
