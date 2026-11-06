@@ -248,7 +248,7 @@ def run_training_pipeline(
             args=TrainingArguments(
                 per_device_train_batch_size=config["sft_batch_size"],
                 gradient_accumulation_steps=config["sft_grad_accum"],
-                warmup_ratio=0.08,
+                warmup_steps=10,
                 num_train_epochs=sft_epochs,
                 max_steps=max_steps,
                 learning_rate=config["learning_rate_sft"],
