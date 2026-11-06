@@ -323,12 +323,17 @@ def build_and_export_package(
 
 def push_to_huggingface(export_dir: str, repo_id: str, token: Optional[str] = None):
     """Pushes the packaged folder to Hugging Face Hub using HfApi."""
-    from huggingface_hub import HfApi
+    from huggingface_hub import HfApi, HfFolder
 
-    token = token or os.environ.get("HF_TOKEN")
+    # Clean up internal .cache folder before upload
+    cache_dir = os.path.join(export_dir, ".cache")
+    if os.path.exists(cache_dir):
+        shutil.rmtree(cache_dir, ignore_errors=True)
+
+    token = token or os.environ.get("HF_TOKEN") or HfFolder.get_token()
     if not token:
         raise ValueError(
-            "Hugging Face token not found! Provide via --token or set the 'HF_TOKEN' environment variable."
+            "Hugging Face token not found! Log in with `huggingface-cli login`, pass `--token <token>`, or set `export HF_TOKEN=<token>`."
         )
 
     print("\n" + "=" * 70)
