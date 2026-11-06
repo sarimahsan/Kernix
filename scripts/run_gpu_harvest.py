@@ -14,7 +14,7 @@ import argparse
 # Ensure project root is in sys.path when invoked from scripts/ or anywhere
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from gpuperf.profiler.multi_gpu_harvester import MultiGPUHarvester
+from kernix.profiler.multi_gpu_harvester import MultiGPUHarvester
 
 
 def main():

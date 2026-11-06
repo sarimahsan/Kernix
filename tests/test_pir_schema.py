@@ -1,7 +1,7 @@
 """Unit tests for the PIR Schema."""
 
 import unittest
-from gpuperf.schema.pir import (
+from kernix.schema.pir import (
     PIRReport,
     HardwareInfo,
     LaunchConfig,

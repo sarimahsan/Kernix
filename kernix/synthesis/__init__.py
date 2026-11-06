@@ -1,5 +1,5 @@
 """Kernel synthesis and trajectory generation engines."""
-from gpuperf.synthesis.trajectory_builder import TrajectoryBuilder
+from kernix.synthesis.trajectory_builder import TrajectoryBuilder
 
 __all__ = ["TrajectoryBuilder"]
 

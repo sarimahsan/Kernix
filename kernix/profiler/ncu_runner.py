@@ -10,8 +10,8 @@ import os
 import shutil
 import tempfile
 from typing import List, Optional, Dict
-from gpuperf.schema.pir import PIRReport, HardwareInfo
-from gpuperf.profiler.ncu_parser import NCUParser
+from kernix.schema.pir import PIRReport, HardwareInfo
+from kernix.profiler.ncu_parser import NCUParser
 
 
 class NCURunner:

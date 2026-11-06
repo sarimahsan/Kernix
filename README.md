@@ -162,15 +162,13 @@ Kernix/
 ├── evaluations/                      # Physical silicon benchmark reports
 │   ├── eval_summary_14b_a100.json    # A100 14B Final Silicon Benchmark (100% pass, 1.44x-1.52x)
 │   └── eval_summary_14b_sft_prelim.json
-├── gpuperf/                          # Profiler & analysis backend
+├── kernix/                           # Core Kernix engine & optimization package
 │   ├── profiler/
 │   │   ├── correctness_gate.py       # 3-Tier Compilation, Numerics & Speedup Gate
 │   │   ├── real_executor.py          # Real CUDA Event benchmarking engine
 │   │   └── ncu_parser.py             # Nsight Compute PIR parser
 │   └── schema/
 │       └── pir.py                    # Compact Profiler Intermediate Representation
-├── kernix/                           # Core Kernix Python package
-│   └── __init__.py
 ├── notebooks/
 │   └── 03_train_and_test_gpuperf_3b.ipynb # Turnkey Multi-Scale Colab Training Notebook
 ├── scripts/

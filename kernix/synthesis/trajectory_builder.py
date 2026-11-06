@@ -7,7 +7,7 @@ ShareGPT / OpenAI / TRL chat-template format for supervised fine-tuning and DPO.
 from __future__ import annotations
 import json
 from typing import Dict, Any, List, Optional
-from gpuperf.schema.pir import PIRReport
+from kernix.schema.pir import PIRReport
 
 
 SYSTEM_PROMPT = """You are GPUPerf, a specialized GPU systems optimization engineer.

@@ -16,8 +16,8 @@ from typing import List, Dict, Any
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from gpuperf.schema.pir import PIRReport
-from gpuperf.synthesis.trajectory_builder import TrajectoryBuilder
+from kernix.schema.pir import PIRReport
+from kernix.synthesis.trajectory_builder import TrajectoryBuilder
 
 
 def merge_multi_gpu_datasets(raw_dir: str = "./data/raw", output_dir: str = "./data"):

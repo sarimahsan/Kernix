@@ -27,7 +27,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from gpuperf.profiler.correctness_gate import CorrectnessGate
+from kernix.profiler.correctness_gate import CorrectnessGate
 
 
 def free_memory(*objects):
@@ -67,7 +67,7 @@ def compute_sequence_logp(model, tokenizer, prompt_text: str, response_text: str
 
 
 def run_all_in_one_evaluation(
-    checkpoint_path: str = "./checkpoints/gpuperf_3b_dpo_final",
+    checkpoint_path: str = "./checkpoints/kernix_3b_dpo_final",
     base_model_override: str | None = None,
     sft_data_path: str = "./data/sft_multi_gpu.jsonl",
     dpo_data_path: str = "./data/dpo_multi_gpu.jsonl",
@@ -82,6 +82,8 @@ def run_all_in_one_evaluation(
     precision: str = "auto",
     force_merged: bool = False
 ):
+    if not os.path.exists(checkpoint_path) and os.path.exists("./checkpoints/gpuperf_3b_dpo_final"):
+        checkpoint_path = "./checkpoints/gpuperf_3b_dpo_final"
     print("=" * 80)
     print("            GPUPERF ALL-IN-ONE BENCHMARK & EVALUATION SUITE")
     print("=" * 80)
@@ -593,7 +595,9 @@ def main():
     args = parser.parse_args()
 
     # Determine checkpoint path from positional argument or flag
-    chosen_checkpoint = args.checkpoint or args.checkpoint_pos or "./checkpoints/gpuperf_3b_dpo_final"
+    chosen_checkpoint = args.checkpoint or args.checkpoint_pos or (
+        "./checkpoints/kernix_3b_dpo_final" if os.path.exists("./checkpoints/kernix_3b_dpo_final") else "./checkpoints/gpuperf_3b_dpo_final"
+    )
 
     run_all_in_one_evaluation(
         checkpoint_path=chosen_checkpoint,

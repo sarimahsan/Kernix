@@ -12,11 +12,11 @@ import time
 import json
 import shutil
 from typing import Dict, Any, List, Optional
-from gpuperf.schema.pir import PIRReport, HardwareInfo, LaunchConfig, PerformanceMetrics, MemoryEfficiency, BottleneckDiagnosis
-from gpuperf.profiler.ncu_runner import NCURunner
-from gpuperf.profiler.ncu_parser import NCUParser
-from gpuperf.profiler.real_executor import RealKernelExecutor
-from gpuperf.synthesis.workload_generators import get_sweep_configs
+from kernix.schema.pir import PIRReport, HardwareInfo, LaunchConfig, PerformanceMetrics, MemoryEfficiency, BottleneckDiagnosis
+from kernix.profiler.ncu_runner import NCURunner
+from kernix.profiler.ncu_parser import NCUParser
+from kernix.profiler.real_executor import RealKernelExecutor
+from kernix.synthesis.workload_generators import get_sweep_configs
 
 
 class MultiGPUHarvester:

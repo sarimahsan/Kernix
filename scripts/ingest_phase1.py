@@ -15,12 +15,12 @@ from typing import List, Dict, Any, Tuple
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from gpuperf.schema.pir import PIRReport, HardwareInfo
-from gpuperf.profiler.ncu_runner import NCURunner
-from gpuperf.profiler.ncu_parser import NCUParser
-from gpuperf.ingestion.kernelbenchx_loader import KernelBenchXLoader
-from gpuperf.ingestion.megatraces_loader import MegaTracesLoader
-from gpuperf.synthesis.trajectory_builder import TrajectoryBuilder
+from kernix.schema.pir import PIRReport, HardwareInfo
+from kernix.profiler.ncu_runner import NCURunner
+from kernix.profiler.ncu_parser import NCUParser
+from kernix.ingestion.kernelbenchx_loader import KernelBenchXLoader
+from kernix.ingestion.megatraces_loader import MegaTracesLoader
+from kernix.synthesis.trajectory_builder import TrajectoryBuilder
 
 
 def create_curated_seed_records() -> List[Dict[str, Any]]:

@@ -1,8 +1,8 @@
 """Unit tests for the NCU Parser and Bottleneck Diagnoser."""
 
 import unittest
-from gpuperf.profiler.ncu_parser import NCUParser
-from gpuperf.schema.pir import PIRReport, HardwareInfo, LaunchConfig, PerformanceMetrics
+from kernix.profiler.ncu_parser import NCUParser
+from kernix.schema.pir import PIRReport, HardwareInfo, LaunchConfig, PerformanceMetrics
 
 
 class TestNCUParser(unittest.TestCase):

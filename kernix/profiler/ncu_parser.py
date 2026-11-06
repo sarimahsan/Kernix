@@ -8,7 +8,7 @@ from __future__ import annotations
 import csv
 import io
 from typing import Dict, Any, List, Optional
-from gpuperf.schema.pir import (
+from kernix.schema.pir import (
     PIRReport,
     HardwareInfo,
     LaunchConfig,
