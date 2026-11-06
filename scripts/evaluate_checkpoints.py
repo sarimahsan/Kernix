@@ -109,19 +109,10 @@ def run_all_in_one_evaluation(
     )
     base_model.eval()
 
-    has_adapter = os.path.exists(checkpoint_path) and os.path.exists(os.path.join(checkpoint_path, "adapter_config.json"))
-    if has_adapter:
-        print(f"[2/5] Loading LoRA Adapter from: {checkpoint_path}...")
-        eval_model = PeftModel.from_pretrained(base_model, checkpoint_path)
-        eval_model.eval()
-    else:
-        print("[!] No adapter found. Evaluating Base Model only.")
-        eval_model = base_model
-
     # -------------------------------------------------------------
     # METRIC 1: PERPLEXITY & LOSS (Base vs. Fine-Tuned)
     # -------------------------------------------------------------
-    print("\n[3/5] Computing Cross-Entropy Loss & Perplexity (PPL)...")
+    print("\n[2/5] Computing Base Model Baseline Loss & Perplexity (PPL)...")
 
     def calc_ppl(m):
         total_loss, total_tokens = 0.0, 0
@@ -137,12 +128,24 @@ def run_all_in_one_evaluation(
         avg_loss = total_loss / total_tokens
         return avg_loss, float(np.exp(avg_loss))
 
-    ft_loss, ft_ppl = calc_ppl(eval_model)
-    base_loss, base_ppl = calc_ppl(base_model) if has_adapter else (ft_loss, ft_ppl)
+    # Evaluate pure base model BEFORE attaching LoRA (PeftModel mutates base_model in-place!)
+    base_loss, base_ppl = calc_ppl(base_model)
+
+    has_adapter = os.path.exists(checkpoint_path) and os.path.exists(os.path.join(checkpoint_path, "adapter_config.json"))
+    if has_adapter:
+        print(f"\n[3/5] Loading LoRA Adapter from: {checkpoint_path}...")
+        eval_model = PeftModel.from_pretrained(base_model, checkpoint_path)
+        eval_model.eval()
+        ft_loss, ft_ppl = calc_ppl(eval_model)
+    else:
+        print("\n[!] No adapter found. Evaluating Base Model only.")
+        eval_model = base_model
+        ft_loss, ft_ppl = base_loss, base_ppl
+
     ppl_reduction = ((base_ppl - ft_ppl) / base_ppl) * 100 if has_adapter else 0.0
 
-    print(f"  * Base Model Loss:     {base_loss:.4f} | Perplexity (PPL): {base_ppl:.2f}")
-    print(f"  * Fine-Tuned Loss:     {ft_loss:.4f} | Perplexity (PPL): {ft_ppl:.2f}")
+    print(f"  * Base Model Loss:      {base_loss:.4f} | Perplexity (PPL): {base_ppl:.2f}")
+    print(f"  * Fine-Tuned Loss:      {ft_loss:.4f} | Perplexity (PPL): {ft_ppl:.2f}")
     print(f"  * PPL Uncertainty Drop: {ppl_reduction:.1f}%")
 
     # -------------------------------------------------------------
@@ -182,17 +185,23 @@ def run_all_in_one_evaluation(
         arch = metadata.get("arch", "sm_unknown")
         baseline_lat = metadata.get("latency_us", 10000.0)
 
-        # Generate response
-        inputs = tokenizer.apply_chat_template(
+        # Generate response safely across all HuggingFace / Transformers versions
+        prompt_text = tokenizer.apply_chat_template(
             s["messages"][:2],
-            tokenize=True,
-            add_generation_prompt=True,
-            return_tensors="pt"
-        ).to(device)
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        tokenized_inputs = tokenizer(prompt_text, return_tensors="pt").to(device)
+        input_len = tokenized_inputs["input_ids"].shape[1]
 
         with torch.no_grad():
-            outputs = eval_model.generate(input_ids=inputs, max_new_tokens=768, temperature=0.1, do_sample=False)
-            gen_text = tokenizer.decode(outputs[0][inputs.shape[1]:], skip_special_tokens=True)
+            outputs = eval_model.generate(
+                **tokenized_inputs,
+                max_new_tokens=768,
+                do_sample=False,
+                pad_token_id=tokenizer.eos_token_id
+            )
+            gen_text = tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True)
 
         code_str, launch_cfg = CorrectnessGate.extract_triton_code(gen_text)
 
